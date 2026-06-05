@@ -107,6 +107,35 @@ def _safe_chunk_batch_to_qualities_decomposer(group: List[str]) -> List[Qualitie
         print(f"[decompose_documents] Batch failed (size={len(group)}): {e}")
         return [[] for _ in range(len(group))]
 
+
+def _doc_source_context(doc: Document, index: int) -> dict[str, Any]:
+    """
+    Build the source context shown by the UI for qualities from this document.
+    """
+    metadata = dict(getattr(doc, "metadata", {}) or {})
+    dl_meta = metadata.get("dl_meta") if isinstance(metadata, dict) else None
+
+    headings = None
+    if isinstance(dl_meta, dict):
+        raw_headings = dl_meta.get("headings")
+        if isinstance(raw_headings, list) and raw_headings:
+            headings = [str(h) for h in raw_headings if str(h).strip()]
+
+    compact_metadata: dict[str, Any] = {}
+    for key in ("source", "page", "page_no", "page_number"):
+        value = metadata.get(key)
+        if isinstance(value, (str, int, float, bool)):
+            compact_metadata[key] = value
+
+    if headings:
+        compact_metadata["headings"] = headings
+
+    return {
+        "source_doc_index": index,
+        "source_text": getattr(doc, "page_content", "") or "",
+        **({"metadata": compact_metadata} if compact_metadata else {}),
+    }
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -130,10 +159,12 @@ def decompose_documents(
         - log_payload: the same payload that was written to disk
     """
     all_qualities: Qualities = []
+    quality_sources: list[dict[str, Any]] = []
 
     if not docs:
         log_payload = save_qualities_json(
             qualities=all_qualities,
+            quality_sources=quality_sources,
             mode=mode,
             num_input_docs=0,
             use_batch_decomposer=use_batch_decomposer,
@@ -145,6 +176,7 @@ def decompose_documents(
         return all_qualities, log_payload
 
     texts: List[str] = [getattr(doc, "page_content", "") for doc in docs]
+    source_contexts = [_doc_source_context(doc, idx) for idx, doc in enumerate(docs)]
 
     # --- Fast path: batched chunk decomposition ---
     if mode == DecomposeMode.CHUNKS and use_batch_decomposer:
@@ -172,8 +204,17 @@ def decompose_documents(
                             f"🧷 LLM Decomposer (parallel): Processing batch ({batch_idx+1}/{num_batches}) ..."
                         )
 
-                    for qualities in group_results:
+                    start_idx = batch_idx * batch_size
+                    for offset, qualities in enumerate(group_results):
+                        source_context = source_contexts[start_idx + offset]
                         all_qualities.extend(qualities)
+                        quality_sources.extend(
+                            {
+                                "quality": quality,
+                                **source_context,
+                            }
+                            for quality in qualities
+                        )
 
         else:
             for batch_idx, group in track(
@@ -192,11 +233,21 @@ def decompose_documents(
                     )
 
                 group_results: List[Qualities] = _chunk_batch_to_qualities_decomposer(group)
-                for qualities in group_results:
+                start_idx = batch_idx * batch_size
+                for offset, qualities in enumerate(group_results):
+                    source_context = source_contexts[start_idx + offset]
                     all_qualities.extend(qualities)
+                    quality_sources.extend(
+                        {
+                            "quality": quality,
+                            **source_context,
+                        }
+                        for quality in qualities
+                    )
 
         log_payload = save_qualities_json(
             qualities=all_qualities,
+            quality_sources=quality_sources,
             mode=mode,
             num_input_docs=len(docs),
             use_batch_decomposer=True,
@@ -208,12 +259,21 @@ def decompose_documents(
         return all_qualities, log_payload
 
     # --- Default path: one document -> one decompose() call ---
-    for text in texts:
+    for doc_idx, text in enumerate(texts):
         qualities = decompose(text, mode=mode)
         all_qualities.extend(qualities)
+        source_context = source_contexts[doc_idx]
+        quality_sources.extend(
+            {
+                "quality": quality,
+                **source_context,
+            }
+            for quality in qualities
+        )
 
     log_payload = save_qualities_json(
         qualities=all_qualities,
+        quality_sources=quality_sources,
         mode=mode,
         num_input_docs=len(docs),
         use_batch_decomposer=False,

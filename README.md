@@ -58,10 +58,10 @@ The pipeline is intentionally **modular** — each stage is a single function ca
 |----|------|--------|-------------|
 | 1️⃣ | **KG Subgraph Retrieval** | `graph/` (Neo4j) | Pull all relations around a user-chosen keyword |
 | 2️⃣ | **Corpus → Qualities** | `extraction/` + `keyword_extraction/` ([Docling](https://github.com/DS4SD/docling), [KeyBERT](https://github.com/MaartenGr/KeyBERT), LLM Decomposer) | PDF → paragraphs → keyword gate → atomic *quality* sentences |
-| 3️⃣ | **Vector Similarity Filter** | `subgraph_similarity/` (SentenceTransformers + hnswlib / FAISS) | Keep only qualities semantically close to the KG subgraph |
+| 3️⃣ | **Vector Similarity Filter** | `subgraph_similarity/` (SentenceTransformers + exact NumPy vector search) | Keep only qualities related to the KG subgraph |
 | 4️⃣ | **Novelty Comparator (LLM)** | `novelty/` | Classify each kept quality → `EXISTING` / `PARTIALLY_NEW` / `NEW` |
-| 5️⃣ | **Human Oversight UI** | `ui/` (Flask + Cytoscape.js) | Reviewer accepts / rejects per tab |
-| 6️⃣ | **Triplet Extraction (LLM)** | `extraction/triplet_extraction_batch.py` | Pull (S, P, O) from accepted qualities |
+| 5️⃣ | **Triplet-First Human Oversight UI** | `ui/` (Flask + Cytoscape.js) | Auto-extract predicate-constrained triplets, then let the reviewer include / edit / reject |
+| 6️⃣ | **Triplet Extraction (LLM)** | `extraction/triplet_extraction_batch.py` | Pull allowed-predicate (S, P, O) triples from reviewed qualities |
 | 7️⃣ | **KG Upsert** | `graph/store.py` | Write approved triples back to Neo4j with provenance |
 
 🧠 **LLM backends** are pluggable: hosted ([Groq](https://groq.com/), [OpenAI](https://openai.com/)) or local ([HuggingFace](https://huggingface.co/) Transformers).
@@ -156,12 +156,73 @@ All pipeline behavior is **environment-driven** (see [`src/kbdebugger/pipeline/c
 | `KB_SOURCE_KIND` | `TEXT` | `TEXT` / `PDF_SENTENCES` / `PDF_CHUNKS` |
 | `KB_PDF_PATH` | `data/SDS/InstructCIR.pdf` | Corpus PDF |
 | `KB_ENCODER_MODEL_NAME` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model |
+| `KB_SIMILARITY_MODE` | `node_entity` | `node_entity` compares quality keyphrases to KG node labels; `sentence` keeps full quality sentence ↔ KG relation sentence comparison |
+| `KB_ENTITY_EXTRACTION_MODE` | `keybert` | `keybert` reuses cached KeyBERT/SentenceTransformer models; `simple` uses regex chunks with scikit-learn stop words |
+| `KB_ENTITY_KEYBERT_NGRAM_MAX` | `3` | Max phrase length for KeyBERT quality entity/keyphrase extraction |
 | `KB_QUALITY_TO_KG_TOP_K` | `5` | Neighbors per candidate quality |
 | `KB_MIN_SIMILARITY_THRESHOLD` | `0.55` | Cosine cutoff for vector filter |
+| `KB_NODE_ENTITY_TOP_K` | `5` | Nearest KG nodes retrieved per quality entity/keyphrase |
+| `KB_NODE_ENTITY_MAX_ENTITIES_PER_QUALITY` | `8` | Max candidate entities/keyphrases extracted per quality |
+| `KB_KEYWORD_SYNONYMS_ENABLED` | `true` | Enable cached LLM/curated synonyms for keyword paragraph filtering |
+| `KB_DECOMPOSER_PARALLEL` | `true` | Run decomposition batches concurrently |
+| `KB_DECOMPOSER_MAX_WORKERS` | `2` | Conservative worker count for decomposition LLM calls |
+| `KB_NOVELTY_PARALLEL` | `true` | Run novelty batches concurrently |
+| `KB_NOVELTY_MAX_WORKERS` | `2` | Conservative worker count for novelty LLM calls |
 | `KB_NOVELTY_LLM_TEMPERATURE` | `0.0` | Determinism for novelty decisions |
 | `KB_TRIPLET_EXTRACTION_BATCH_SIZE` | `5` | Qualities per triplet-extraction call |
+| `KB_TRIPLET_EXTRACTION_PARALLEL` | `true` | Run triplet extraction batches concurrently |
+| `KB_TRIPLET_EXTRACTION_MAX_WORKERS` | `2` | Conservative worker count for triplet LLM calls |
 | `DOCLING_ENABLE_OCR` | `false` | Toggle OCR in Docling |
 | `DOCLING_ENABLE_TABLE_RECOGNITION` | `false` | Parse table structure |
+
+### Current review flow
+
+- The quality screen is audit-only: it shows novelty-reviewed qualities and provenance, but no manual selection checkboxes or quality-level export.
+- Triplet extraction starts automatically for all visible reviewed qualities after novelty classification.
+- `NEW` and `PARTIALLY_NEW` triplets are included for KG submission by default; `EXISTING` triplets remain visible for traceability and are excluded by default.
+- No-fit qualities remain visible in the triplet review screen as skipped/warning rows, with original quality and source chunk available.
+- The KG upsert route submits only rows where the reviewer left `include === true`.
+
+### Predicate-constrained triplets
+
+Triplet extraction is backend-owned and predicate-controlled. Allowed predicates live in [`src/kbdebugger/extraction/predicate_options.py`](src/kbdebugger/extraction/predicate_options.py).
+
+- The extractor must use one of the allowed predicates exactly.
+- If no allowed predicate fits, it returns `skipped_reason` instead of forcing a hallucinated relationship.
+- `Fallback` is only valid for explicit fallback mechanisms; it is not a catch-all.
+
+### Triplet review export
+
+The triplet review Export button writes an `.xlsx` audit workbook with one row per non-deleted triplet. Rows are grouped by source chunk and include:
+
+```text
+Source Chunk
+Original Quality
+Nearest KG Match
+Similarity Score
+Extracted Triplet
+Faithfulness (1-3)
+Relevance (1-3)
+Completeness (1-3)
+```
+
+Scoring headers include hidden rubric notes where SheetJS/Excel supports comments, and long review cells are configured for wrapped text where supported.
+
+### Focused checks
+
+```bash
+PYTHONPATH=src venv/bin/python -m compileall \
+  src/kbdebugger/keyword_extraction \
+  src/kbdebugger/subgraph_similarity \
+  src/kbdebugger/pipeline \
+  ui/services
+
+PYTHONPATH=src venv/bin/python -m pytest \
+  tests/test_subgraph_similarity_modes.py \
+  tests/test_post_docling_performance.py \
+  tests/test_triplet_extraction_route.py \
+  -q
+```
 
 ---
 

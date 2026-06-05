@@ -24,8 +24,8 @@ class ParagraphMatch:
 
 @dataclass(frozen=True)
 class KeyBERTConfig:
-    embedding_model: str = "all-mpnet-base-v2"
-    # embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: int = 32
 
     ngram_range: Tuple[int, int] = (1, 1)
     # To extract keyphrases, simply set keyphrase_ngram_range to (1, 2) or higher 

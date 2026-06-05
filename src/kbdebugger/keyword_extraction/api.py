@@ -7,7 +7,7 @@ from kbdebugger.types.ui import ProgressCallback
 
 from .keyword_synonyms import generate_synonyms_for_keyword
 from .keyBERT import run_keybert_matching
-from .types import KeywordDocMatchResult
+from .types import KeyBERTConfig, KeywordDocMatchResult
 
 
 def filter_paragraphs_by_keyword(
@@ -15,6 +15,8 @@ def filter_paragraphs_by_keyword(
     paragraphs: Sequence[Document],
     search_keyword: str,
     max_synonyms: int = 10,
+    config: Optional[KeyBERTConfig] = None,
+    synonyms_enabled: bool = True,
     progress: Optional[ProgressCallback] = None,
 ) -> tuple[
         KeywordDocMatchResult,
@@ -48,7 +50,8 @@ def filter_paragraphs_by_keyword(
     KeywordMatchResult
         Matched/unmatched paragraphs plus the synonyms that were used.
     """
-    synonyms = generate_synonyms_for_keyword(search_keyword)
+    cfg = config or KeyBERTConfig()
+    synonyms = generate_synonyms_for_keyword(search_keyword) if synonyms_enabled else []
     if max_synonyms and len(synonyms) > max_synonyms:
         synonyms = synonyms[:max_synonyms]
 
@@ -59,6 +62,7 @@ def filter_paragraphs_by_keyword(
         paragraphs=texts,
         search_keyword=search_keyword,
         synonyms=synonyms,
+        config=cfg,
         progress=progress
     )
     # ⚠️ Notice that we ignore the matched/unmatched ParagraphMatch objects here since they contain 

@@ -65,6 +65,9 @@ def decompose_paragraphs_to_qualities(
     *,
     paragraphs: List[Document],
     progress: Optional[ProgressCallback] = None,
+    batch_size: int = 5,
+    parallel: bool = False,
+    max_workers: Optional[int] = 2,
     # mode: str = "paragraph",
 ) -> tuple[Qualities, dict]:
     """
@@ -86,6 +89,9 @@ def decompose_paragraphs_to_qualities(
     qualities, decomposer_log = decompose_documents(
         docs=paragraphs, 
         mode=DecomposeMode.CHUNKS,
+        batch_size=batch_size,
+        parallel=parallel,
+        max_workers=max_workers,
         progress=progress
     )
 

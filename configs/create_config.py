@@ -4,7 +4,7 @@ import configparser
 def create_config():
     config = configparser.ConfigParser()
 
-    # Add sections and key-value pairs
+    # Add sections and keπy-value pairs
     config['General'] = {
         'extraction': 'Sentences', # "Chunks" or "Sentences" 
         'bulk_load': False

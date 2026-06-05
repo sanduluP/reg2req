@@ -1,19 +1,15 @@
-You are a helpful assistant. You will be given a search keyword input by a user.
-Your task is to think of the closest synonyms or alternatives of this keyword, which will be used to help the semantic search engine retrieve most related results.
+Return only strict JSON. Do not explain or reason.
 
-Output a strict JSON output in the following format:
+Generate up to 10 close synonyms, alternatives, and natural morphological variants for this search keyword. These terms will be used for keyword expansion in a semantic search filter.
+
+Required JSON shape:
 {"synonyms": ["...", "...", ...]}
 
 Rules:
 - Keep the list of synonyms to maximum of 10 elements.
-- If the keyword can have a synonym created by using the opposite of the word prefixed by "non-", you may include this as a Synonym. Examples: Robustness = non‑fragility, Stability = non‑volatility, Integrity = non‑corruption, and so on.
-
-Rules:
-- Keep the list of synonyms to maximum of 10 elements.
-- Include close morphological/derivational variants of the keyword when natural/common:
-  - If keyword ends with -ability/-ibility/-ility/-ity/-ness, consider adding the related adjective and/or verb, and also the action/result noun (often -ation/-tion/-sion or -ment).
-  - If keyword ends with -ation/-tion/-sion/-ment/-ization, consider adding the base verb, the gerund (-ing), and the property noun (-ability/-ity) if common.
-- If the keyword can have a synonym created by using the opposite of the word prefixed by "non-", you may include this as a Synonym.
+- Include close morphological or derivational variants when natural/common.
+- Do not include broad unrelated concepts.
+- Output JSON only.
 
 Search keyword:
 $keyword

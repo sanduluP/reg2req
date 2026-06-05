@@ -33,6 +33,65 @@ body {
   gap: 6px;
 }
 
+.pipeline-toolbar-card {
+  flex: 0 0 auto;
+}
+
+.pipeline-toolbar {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pipeline-toolbar .input-group-text {
+  background: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding-inline: 0.55rem;
+}
+
+.pipeline-toolbar .form-select,
+.pipeline-toolbar .form-control,
+.pipeline-toolbar .btn {
+  min-height: 34px;
+}
+
+.pipeline-keyword,
+.pipeline-document {
+  min-width: 0;
+}
+
+#keyword-spinner {
+  right: 2.25rem;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.pipeline-actions {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+#pipeline-progress {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .pipeline-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-actions {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .pipeline-actions .btn:first-child {
+    flex: 1 1 auto;
+  }
+}
+
 
 /* Utility */
 .hidden {
@@ -57,14 +116,20 @@ body {
   min-height: 0;
   border-radius: 0.5rem;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #dee2e6;
+  background: #f8fafc;
+  border: 1px solid #dbe3ee;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
 /* Cytoscape canvas fills wrapper */
 .graph-container {
   position: absolute;
   inset: 0;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    #f8fafc;
+  background-size: 32px 32px;
 }
 
 
@@ -151,14 +216,11 @@ body {
 /* The section must also be a flex column and shrinkable */
 #oversight-section {
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
-  /* CRITICAL */
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* prevent section content from escaping */
-
-  max-height: 90%;
 }
 
 /* Oversight table readability */
@@ -171,6 +233,16 @@ body {
 #oversight-section .quality-cell {
   /* font-size: 1.02rem; */
   /* line-height: 1.35; */
+}
+
+.source-popover {
+  max-width: min(720px, calc(100vw - 2rem));
+}
+
+.source-popover .popover-body {
+  max-height: 45vh;
+  overflow: auto;
+  white-space: pre-wrap;
 }
 
 /* Bigger checkbox */
@@ -220,25 +292,34 @@ body {
   height: auto !important;
 }
 
-/* Triplets panel: header stays fixed, only table scrolls */
+/* Triplets panel: toolbar stays fixed, only the validation table scrolls. */
 #oversight-bottom {
-  max-height: 60vh;
-  /* keep whatever height you liked */
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
   overflow: hidden;
-  /* prevent the whole panel from scrolling */
   display: flex;
   flex-direction: column;
 }
 
-/* The table area becomes the scroll container */
+/* The table area becomes the main review viewport. */
 #triplets-table-wrap {
-  flex: 1;
-  /* take remaining space under header/toolbars */
-  min-height: 0;
-  /* CRITICAL in flex layouts for scrolling */
+  flex: 1 1 auto;
+  min-height: 20rem;
   overflow-y: auto;
   overflow-x: auto;
-  /* keep horizontal scroll if needed */
+}
+
+#triplets-table-wrap .table {
+  margin-bottom: 0;
+  min-width: 980px;
+}
+
+#oversight-bottom .table td,
+#oversight-bottom .table th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
 }
 
 /* Optional: sticky table header while scrolling */
@@ -288,4 +369,25 @@ body {
     transform: translate(var(--dx), var(--dy)) rotate(var(--rot));
     opacity: 0;
   }
+}
+
+
+#triplets-skipped-wrap {
+  flex: 0 0 auto;
+  max-height: 10rem;
+  overflow: auto;
+}
+
+
+.triplets-skipped-item {
+  margin-top: 0.35rem;
+}
+
+.triplets-skipped-item summary {
+  cursor: pointer;
+}
+
+.triplets-skipped-item pre {
+  white-space: pre-wrap;
+  overflow: auto;
 }

@@ -319,7 +319,7 @@ class SubgraphSimilarityFilter:
         #       
         #       - scores_matrix: np.ndarray shape (Q, k) of cosine similarities
         with stage_status("📊 Performing batch vector similarity search:"):
-            tick("📊 Searching nearest neighbors (FAISS)…")
+            tick("📊 Searching nearest neighbors…")
             neighbors_per_q, scores = index.search_batch(vectors_np, k=self.top_k)
 
 

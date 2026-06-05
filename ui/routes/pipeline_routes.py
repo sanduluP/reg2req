@@ -15,12 +15,14 @@ Flask is the server. Our 'kbdebugger' code runs *inside* Flask
 in the background job thread.
 """
 import os
+import traceback
 from pathlib import Path
 from threading import Thread
 
 from flask import Blueprint, jsonify, request
 
 from kbdebugger.pipeline.config import PipelineConfig
+from kbdebugger.extraction.predicate_options import DEFAULT_ALLOWED_PREDICATES
 
 from ui.services.job_store import JOB_STORE
 from ui.services.pipeline_runner import run_pipeline
@@ -60,6 +62,11 @@ def _save_upload_to_tmp(file_storage) -> Path:
     dst = uploads_dir / f"{safe_name}"
     file_storage.save(dst)
     return dst
+
+
+@pipeline_bp.get("/triplet-predicates")
+def get_triplet_predicates():
+    return jsonify({"predicates": list(DEFAULT_ALLOWED_PREDICATES)})
 
 
 @pipeline_bp.post("/run")
@@ -102,6 +109,7 @@ def start_pipeline_run():
             result = run_pipeline(job_id=job.job_id, file_path=path, keyword=keyword, cfg=cfg)
             JOB_STORE.set_done(job.job_id, result)
         except Exception as e:
+            traceback.print_exc()
             JOB_STORE.set_error(job.job_id, str(e))
 
     # Fire a thread in the background 
@@ -150,67 +158,121 @@ def get_job_status(job_id: str):
 @pipeline_bp.post("/triplet-extraction")
 def start_triplet_extraction():
     from kbdebugger.extraction.triplet_extraction_batch import extract_triplets_batch
-    from kbdebugger.graph.api import upsert_extracted_triplets
-    from kbdebugger.types import ExtractionResult
     """
     Start Stage 6 (Triplet extraction) as a background job.
 
     Request (JSON)
     --------------
     {
-        "selected_results": [ <QualityNoveltyResult-like dict>, ... ]
+        "selected_items": [
+            {"quality": "...", "source_context": {...}},
+            ...
+        ]
     }
 
-    Response (JSON)
-    ---------------
-    { "job_id": "<uuid>" }
-
-    Notes
-    -----
-    Client should poll GET /api/pipeline/jobs/<job_id> to retrieve:
-    - progress updates (optional later)
-    - final result: List[ExtractionResult]
+    Backwards-compatible input: {"selected_qualities": ["...", ...]}
     """
     payload = request.get_json(silent=True) or {}
-    raw = payload.get("selected_qualities")
+    raw_items = payload.get("selected_items")
+    raw_qualities = payload.get("selected_qualities")
 
-    if not isinstance(raw, list) or len(raw) == 0:
-        return jsonify({"error": "Expected JSON body with non-empty 'selected_qualities' list"}), 400
+    selected_items: list[dict] = []
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if isinstance(item, dict):
+                quality = str(item.get("quality", "")).strip()
+                if quality:
+                    selected_items.append({
+                        "quality": quality,
+                        "source_context": item.get("source_context"),
+                        "decision": item.get("decision"),
+                        "max_score": item.get("max_score"),
+                        "matched_neighbor_sentence": item.get("matched_neighbor_sentence"),
+                    })
+            elif item is not None:
+                quality = str(item).strip()
+                if quality:
+                    selected_items.append({"quality": quality, "source_context": None})
+    elif isinstance(raw_qualities, list):
+        for item in raw_qualities:
+            quality = str(item).strip() if item is not None else ""
+            if quality:
+                selected_items.append({"quality": quality, "source_context": None})
+    else:
+        return jsonify({"error": "Expected non-empty 'selected_items' or 'selected_qualities' list"}), 400
 
-    # sanitize
-    qualities = [str(x).strip() for x in raw if x is not None and str(x).strip()]
-    
-    if not qualities:
+    if not selected_items:
         return jsonify({"error": "No non-empty qualities provided."}), 400
-    
+
+    qualities = [item["quality"] for item in selected_items]
+    allowed_predicates = list(DEFAULT_ALLOWED_PREDICATES)
     job = JOB_STORE.create_job()
 
     def worker() -> None:
         try:
-            # Stage 6
             JOB_STORE.set_running(job.job_id)
+            cfg = get_pipeline_config()
             JOB_STORE.update_progress(
                 job.job_id,
                 stage="TripletExtractionLLM",
-                message=f"🧬 Extracting triplets from {len(qualities)} selected qualities...",
+                message=(
+                    f"Extracting triplets from {len(qualities)} reviewed qualities "
+                    f"(batch size={cfg.triplet_extraction_batch_size}, "
+                    f"parallel={cfg.triplet_extraction_parallel}, "
+                    f"workers={cfg.triplet_extraction_max_workers})..."
+                ),
                 current=None,
                 total=None,
             )
-            
-            cfg = get_pipeline_config()
 
             extracted = extract_triplets_batch(
                 qualities,
-                batch_size=cfg.triplet_extraction_batch_size,  # or just hardcode to 5 for now
+                batch_size=cfg.triplet_extraction_batch_size,
+                allowed_predicates=allowed_predicates,
+                parallel=cfg.triplet_extraction_parallel,
+                max_workers=cfg.triplet_extraction_max_workers,
             )
 
+            aligned_extracted: list[dict] = []
+            for idx, item in enumerate(selected_items):
+                if idx < len(extracted) and isinstance(extracted[idx], dict):
+                    result = extracted[idx]
+                else:
+                    result = {
+                        "sentence": item["quality"],
+                        "triplets": [],
+                        "skipped_reason": "The triplet extractor did not return a result for this quality.",
+                    }
+
+                result["original_quality"] = item["quality"]
+                decision = str(item.get("decision") or "").strip().upper()
+                result["upsert_eligible"] = decision != "EXISTING"
+                if decision:
+                    result["decision"] = decision
+
+                source_context = item.get("source_context")
+                if source_context is not None:
+                    result["source_context"] = source_context
+
+                max_score = item.get("max_score")
+                if max_score is not None:
+                    result["max_score"] = max_score
+
+                matched_neighbor_sentence = str(item.get("matched_neighbor_sentence") or "").strip()
+                if matched_neighbor_sentence:
+                    result["matched_neighbor_sentence"] = matched_neighbor_sentence
+
+                aligned_extracted.append(result)
+
             result = {
-                "extracted_triplets": extracted,
+                "extracted_triplets": aligned_extracted,
+                "allowed_predicates": allowed_predicates,
+                "input_count": len(selected_items),
             }
 
-            # Store result for polling endpoint
             JOB_STORE.set_done(job.job_id, result)
         except Exception as e:
+            traceback.print_exc()
             JOB_STORE.set_error(job.job_id, str(e))
 
     Thread(target=worker, daemon=True).start()
@@ -242,6 +304,8 @@ def start_kg_upsert():
     payload = request.get_json(silent=True) or {}
     raw_extractions = payload.get("extractions")
     source = payload.get("source")
+    allowed_predicate_set = set(DEFAULT_ALLOWED_PREDICATES)
+    invalid_predicates: list[str] = []
 
     if not isinstance(raw_extractions, list) or not raw_extractions:
         return jsonify({"error": "Expected non-empty 'extractions' list"}), 400
@@ -266,9 +330,16 @@ def start_kg_upsert():
             o = str(t[1]).strip()
             p = str(t[2]).strip()
             if s and o and p:
+                if allowed_predicate_set and p not in allowed_predicate_set:
+                    invalid_predicates.append(p)
+                    continue
                 cleaned_triplets.append((s, o, p))
 
         cleaned.append({"sentence": sentence, "triplets": cleaned_triplets})
+
+    if invalid_predicates:
+        invalid = sorted(set(invalid_predicates))
+        return jsonify({"error": f"Unsupported predicate(s): {invalid}"}), 400
 
     if not cleaned:
         return jsonify({"error": "No valid ExtractionResult items provided."}), 400
@@ -302,6 +373,7 @@ def start_kg_upsert():
                 }
             })
         except Exception as e:
+            traceback.print_exc()
             JOB_STORE.set_error(job.job_id, str(e))
 
     Thread(target=worker, daemon=True).start()

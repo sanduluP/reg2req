@@ -105,6 +105,7 @@ def save_chunked_documents_json(
 def build_decomposer_payload(
     *,
     qualities: Qualities,
+    quality_sources: Optional[Sequence[Dict[str, Any]]] = None,
     mode: DecomposeMode,
     num_input_docs: int,
     use_batch_decomposer: bool,
@@ -138,6 +139,9 @@ def build_decomposer_payload(
         "qualities": list(qualities),
     }
 
+    if quality_sources is not None:
+        payload["quality_sources"] = list(quality_sources)
+
     # Keep payload clean: drop None fields
     return {k: v for k, v in payload.items() if v is not None}
 
@@ -145,6 +149,7 @@ def build_decomposer_payload(
 def save_qualities_json(
     *,
     qualities: Qualities,
+    quality_sources: Optional[Sequence[Dict[str, Any]]] = None,
     mode: DecomposeMode,
     num_input_docs: int,
     use_batch_decomposer: bool,
@@ -162,6 +167,7 @@ def save_qualities_json(
     """
     payload = build_decomposer_payload(
         qualities=qualities,
+        quality_sources=quality_sources,
         mode=mode,
         num_input_docs=num_input_docs,
         use_batch_decomposer=use_batch_decomposer,

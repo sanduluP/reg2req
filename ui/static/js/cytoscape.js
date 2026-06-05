@@ -5,7 +5,7 @@
  */
 
 import { renderEmptyDetails, renderEdgeDetails, renderNodeDetails } from "./sidebar.js";
-import { createStyledCytoscape } from "./cytoscape_theme.js";
+import { buildGraphLayoutOptions, createStyledCytoscape } from "./cytoscape_theme.js";
 
 import { getLastSubgraphPayload } from "./state/graph_state.js";
 import { getKeyword } from "./state/oversight_state.js";
@@ -21,6 +21,55 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
   if (!containerEl) throw new Error(`Missing Cytoscape container #${containerId}`);
 
   const { cy, theme } = createStyledCytoscape(containerEl);
+  const labelColorCache = new Map();
+
+  function hashString(value) {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = ((hash << 5) - hash) + value.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }
+
+  function colorForLabel(label) {
+    const key = String(label || "").toLowerCase();
+    if (labelColorCache.has(key)) return labelColorCache.get(key);
+
+    const palette = theme.nodePalette || ["#2563eb"];
+    const color = palette[hashString(key) % palette.length];
+    labelColorCache.set(key, color);
+    return color;
+  }
+
+  function compactLabel(label, maxLength = 34) {
+    const value = String(label || "").replaceAll("_", " ").replaceAll(/\s+/g, " ").trim();
+    if (value.length <= maxLength) return value;
+    return `${value.slice(0, maxLength - 1).trim()}…`;
+  }
+
+  function decorateGraphElements() {
+    cy.nodes().forEach(node => {
+      const label = String(node.data("label") || node.id()).trim();
+      const degree = node.connectedEdges().length;
+      const size = Math.min(72, Math.max(44, 42 + degree * 3));
+      const hubSize = Math.min(84, size + 10);
+
+      node.data({
+        displayLabel: compactLabel(label),
+        color: colorForLabel(label),
+        size,
+        hubSize,
+      });
+
+      node.toggleClass("hub-node", degree >= 4);
+    });
+
+    cy.edges().forEach(edge => {
+      const label = String(edge.data("label") || "").trim();
+      edge.data("displayLabel", compactLabel(label, 28));
+    });
+  }
 
   const highlightEdgeAndRenderDetails = (edge) => {
     cy.elements().removeClass("highlighted-node highlighted-edge");
@@ -62,6 +111,11 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
   cy.on("tap", "edge", (evt) => highlightEdgeAndRenderDetails(evt.target));
   cy.on("tap", "node", (evt) => highlightNodeAndRenderDetails(evt.target));
 
+  cy.on("mouseover", "node", (evt) => evt.target.addClass("hovered-node"));
+  cy.on("mouseout", "node", (evt) => evt.target.removeClass("hovered-node"));
+  cy.on("mouseover", "edge", (evt) => evt.target.addClass("hovered-edge"));
+  cy.on("mouseout", "edge", (evt) => evt.target.removeClass("hovered-edge"));
+
   // Optional: click background -> clear selection
   cy.on("tap", (evt) => {
     if (evt.target !== cy) return;
@@ -76,7 +130,7 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
   });
 
   function resetZoomToInitialView() {
-    cy.fit(undefined, 150);
+    cy.fit(undefined, 90);
   }
 
   const resetZoomBtn = document.getElementById("reset-zoom-btn");
@@ -160,18 +214,21 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
     setShowEmptyState(false);
 
     cy.add(elements);
+    decorateGraphElements();
 
-    cy.layout({
-      name: 'cose',
-      animate: true
-    }).run();
+    const layout = cy.layout(buildGraphLayoutOptions(elements, {
+      stop: () => {
+        cy.fit(undefined, 90);
+      },
+    }));
+    layout.run();
 
     // Fit the graph to the viewport with padding
     // undefined means fit all elements, 150 is the padding.
     // Sometimes fitting immediately while layout is animating can feel jumpy. You can delay fit slightly:
     setTimeout(() => {
-      cy.fit(undefined, 150);
-    }, 250);
+      cy.fit(undefined, 90);
+    }, 450);
   }
 
   // Return theme too in case we want it later

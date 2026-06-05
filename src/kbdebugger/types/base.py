@@ -13,6 +13,13 @@ TripletSubjectObjectPredicate = tuple[Subject, Object, Predicate]  # (Subject, O
 class ExtractionResult(TypedDict):
     sentence: str
     triplets: list[TripletSubjectObjectPredicate]  # [["Subject", "Object", "Relation"], ...]
+    skipped_reason: NotRequired[str]
+    original_quality: NotRequired[str]
+    source_context: NotRequired[Any]
+    decision: NotRequired[str]
+    max_score: NotRequired[float]
+    matched_neighbor_sentence: NotRequired[str]
+    upsert_eligible: NotRequired[bool]
 
 class GraphEnd(TypedDict):
     label: str

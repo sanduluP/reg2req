@@ -105,6 +105,8 @@ def run_pipeline(cfg: PipelineConfig) -> None:
         keybert_result, keybert_logging_payload = filter_paragraphs_by_keyword(
             paragraphs=paragraphs,
             search_keyword=cfg.kg_retrieval_keyword,
+            config=cfg.keybert,
+            synonyms_enabled=cfg.keyword_synonyms_enabled,
             # progress=
         )
 
@@ -112,6 +114,9 @@ def run_pipeline(cfg: PipelineConfig) -> None:
         # Stage 2c: matched paragraphs -> qualities
         candidate_qualities, decomposer_log = decompose_paragraphs_to_qualities(
             paragraphs=keybert_result.matched_docs,
+            batch_size=cfg.decomposer_batch_size,
+            parallel=cfg.decomposer_parallel,
+            max_workers=cfg.decomposer_max_workers,
             # progress=
         )
 
@@ -134,9 +139,11 @@ def run_pipeline(cfg: PipelineConfig) -> None:
             kept,
             max_tokens=cfg.novelty_llm_max_tokens,
             temperature=cfg.novelty_llm_temperature,
+            use_batch=True,
+            batch_size=cfg.novelty_batch_size,
+            parallel=cfg.novelty_parallel,
+            max_workers=cfg.novelty_max_workers,
             pretty_print=False,
-            # use_batch=True
-            # batch_size=5
         )
 
     # # ---------------------------------------------------------------------
@@ -159,6 +166,8 @@ def run_pipeline(cfg: PipelineConfig) -> None:
             # or they may want to extract from both "Partially New" and "New" sentences, etc.)
             novelty_results, 
             batch_size=cfg.triplet_extraction_batch_size,
+            parallel=cfg.triplet_extraction_parallel,
+            max_workers=cfg.triplet_extraction_max_workers,
         )
 
     # ---------------------------------------------------------------------

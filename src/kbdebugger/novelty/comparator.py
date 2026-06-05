@@ -22,10 +22,12 @@ The comparator decides whether a candidate quality is:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 
-from encodings.punycode import T
 import math
+import os
+from time import perf_counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from kbdebugger.llm.model_access import respond
@@ -106,6 +108,8 @@ def classify_qualities_novelty(
     temperature: float = 0.0,
     use_batch: bool = True,
     batch_size: int = 5,
+    parallel: bool = False,
+    max_workers: int = 2,
     pretty_print: bool = True,
     progress: Optional[ProgressCallback] = None,
 ) -> Tuple[
@@ -140,6 +144,12 @@ def classify_qualities_novelty(
 
     batch_size:
         Number of kept items per LLM call (batched mode only).
+
+    parallel:
+        If True, run batch LLM calls concurrently.
+
+    max_workers:
+        Maximum worker threads when parallel is True.
 
     Returns
     -------
@@ -181,21 +191,65 @@ def classify_qualities_novelty(
     # Batched mode
     # -------------------------
     all_results: List[QualityNoveltyResult] = []
-    global_id = 0
-    num_batches = math.ceil(len(kept_qualities) / batch_size) 
+    kept_list = list(kept_qualities)
+    num_batches = math.ceil(len(kept_list) / batch_size)
+    max_workers = max(1, int(max_workers or 1))
+    groups = list(enumerate(batched(kept_list, batch_size=batch_size), start=1))
 
-    groups = batched(list(kept_qualities), batch_size=batch_size)
+    if parallel and num_batches > 1:
+        results_by_batch: Dict[int, List[QualityNoveltyResult]] = {}
+        completed = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(
+                    _classify_novelty_batch,
+                    batch_idx=batch_idx,
+                    group=group,
+                    global_offset=(batch_idx - 1) * batch_size,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    num_batches=num_batches,
+                    worker_count=max_workers,
+                ): batch_idx
+                for batch_idx, group in groups
+            }
+
+            for future in as_completed(futures):
+                batch_idx, batch_results = future.result()
+                results_by_batch[batch_idx] = batch_results
+                completed += 1
+
+                if progress:
+                    progress(
+                        completed,
+                        num_batches,
+                        f"🧑🏻‍⚖️ completed novelty batch ({completed}/{num_batches})...",
+                    )
+
+        for batch_idx in sorted(results_by_batch):
+            all_results.extend(results_by_batch[batch_idx])
+
+        if pretty_print:
+            pretty_print_novelty_results(kept=kept_qualities, results=all_results)
+
+        log_payload = save_novelty_results_json(all_results)
+        return all_results, log_payload
 
     # Use rich.track only when no UI progress callback is given
+    sequential_groups = groups
     if progress is None:
-        groups = track(
-            groups,
-            description=f"🧑🏻‍⚖️ LLM Novelty Comparator: batch_size={batch_size}, num_batches={num_batches}",
+        sequential_groups = track(
+            sequential_groups,
+            description=(
+                f"🧑🏻‍⚖️ LLM Novelty Comparator: batch_size={batch_size}, "
+                f"num_batches={num_batches}, parallel={parallel}, workers={max_workers}"
+            ),
             total=num_batches,
         )
 
 
-    for batch_idx, group in enumerate(groups, start=1):
+    for batch_idx, group in sequential_groups:
         if progress:
             progress(
                 batch_idx,
@@ -203,44 +257,16 @@ def classify_qualities_novelty(
                 f"🧑🏻‍⚖️ determining novelty for a batch of qualities (batch size={len(group)})…",
             )
 
-        # 1) Map each kept quality to the minimal input schema expected by the prompt 
-        novelty_inputs: List[QualityNoveltyInput] = [
-            kept_quality_to_novelty_input(k) for k in group
-        ]
-
-        # 2) 🏗️ Build prompt items with stable integer ids.
-        #    We send dicts to the prompt (JSON contract), but we keep the typed
-        #    objects (of type: QualityNoveltyInput) separately for coercion and enrichment.
-        items_for_prompt: List[Dict[str, Any]] = []
-        id_to_input: Dict[int, QualityNoveltyInput] = {}
-
-        for i, ni in enumerate(novelty_inputs):
-            rid = global_id + i
-            id_to_input[rid] = ni
-
-            # The novelty input dict for the prompt includes all fields of ni + the stable "id" field.
-            d = asdict(ni)
-            d["id"] = rid
-            items_for_prompt.append(d)
-
-        # 3) Build the batched prompt using the shared prompt-builder.
-        prompt = build_prompt_batch(
-            prompt_name="quality_novelty_comparator_batch",
-            examples_name="quality_novelty_comparator",
-            items=items_for_prompt,
-            # items_var="items_json",
-            # wrapper_key="items",
+        _, batch_results = _classify_novelty_batch(
+            batch_idx=batch_idx,
+            group=group,
+            global_offset=(batch_idx - 1) * batch_size,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            num_batches=num_batches,
+            worker_count=1,
         )
-
-        # 4) Call the LLM once for the entire batch.
-        response = respond(prompt, max_tokens=max_tokens, temperature=temperature, json_mode=True)
-        parsed = ensure_json_object(response)
-
-        # 5) Parse + validate + coerce using shared coercion logic.
-        batch_results = coerce_batched_novelty_response(parsed, id_to_input=id_to_input)
         all_results.extend(batch_results)
-
-        global_id += len(group)
 
     # all_results is in ascending id order, which matches original kept order.
 
@@ -249,3 +275,66 @@ def classify_qualities_novelty(
     
     log_payload = save_novelty_results_json(all_results)
     return all_results, log_payload
+
+
+def _classify_novelty_batch(
+    *,
+    batch_idx: int,
+    group: List[KeptQuality],
+    global_offset: int,
+    max_tokens: int,
+    temperature: float,
+    num_batches: int,
+    worker_count: int,
+) -> Tuple[int, List[QualityNoveltyResult]]:
+    model_label = _llm_model_label()
+    novelty_inputs: List[QualityNoveltyInput] = [
+        kept_quality_to_novelty_input(k) for k in group
+    ]
+
+    items_for_prompt: List[Dict[str, Any]] = []
+    id_to_input: Dict[int, QualityNoveltyInput] = {}
+
+    for i, ni in enumerate(novelty_inputs):
+        rid = global_offset + i
+        id_to_input[rid] = ni
+        d = asdict(ni)
+        d["id"] = rid
+        items_for_prompt.append(d)
+
+    prompt = build_prompt_batch(
+        prompt_name="quality_novelty_comparator_batch",
+        examples_name="quality_novelty_comparator",
+        items=items_for_prompt,
+    )
+
+    started = perf_counter()
+    try:
+        response = respond(prompt, max_tokens=max_tokens, temperature=temperature, json_mode=True)
+        parsed = ensure_json_object(response)
+        batch_results = coerce_batched_novelty_response(parsed, id_to_input=id_to_input)
+    except Exception:
+        elapsed = perf_counter() - started
+        print(
+            "[NoveltyLLM] "
+            f"model={model_label} batch={batch_idx}/{num_batches} size={len(group)} workers={worker_count} "
+            f"prompt_chars={len(prompt)} elapsed_s={elapsed:.2f} failures=1"
+        )
+        raise
+
+    elapsed = perf_counter() - started
+    print(
+        "[NoveltyLLM] "
+        f"model={model_label} batch={batch_idx}/{num_batches} size={len(group)} workers={worker_count} "
+        f"prompt_chars={len(prompt)} elapsed_s={elapsed:.2f} failures=0"
+    )
+    return batch_idx, batch_results
+
+
+def _llm_model_label() -> str:
+    return (
+        os.getenv("MODEL_SERVICE_NAME")
+        or os.getenv("GROQ_MODEL")
+        or os.getenv("HF_LOCAL_MODEL")
+        or "unknown"
+    )

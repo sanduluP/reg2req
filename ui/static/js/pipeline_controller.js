@@ -3,7 +3,7 @@
  */
 
 import { startPipelineJob, getJobStatus } from "./pipeline_client.js";
-import { showProgressPanel, updateProgressPanel } from "./pipeline_progress_ui.js";
+import { hideProgressPanel, showProgressPanel, updateProgressPanel } from "./pipeline_progress_ui.js";
 import { resetElapsedTimer, updateElapsedTimer } from "./timer.js";
 import { setRunContext } from "./state/oversight_state.js";
 import { confirmModal } from "./modals/confirm_modal.js";
@@ -222,6 +222,7 @@ export function wirePipelineRunControls({
           isRunning = false;
           syncRunUi();
 
+          hideProgressPanel();
           onDone?.(job.result);
           return;
         }

@@ -1,40 +1,62 @@
 [
   {
-    "sentence": "There is no guarantee that a DeepL translation is 100% correct.",
+    "sentence": "A Convolutional Neural Network is a subclass of a Deep Learning model.",
     "triplets": [
-      ["DeepL translation", "100% correct", "is not guaranteed to be"]
-    ]
+      [
+        "Convolutional Neural Network",
+        "Deep Learning model",
+        "IsSubclassOf"
+      ]
+    ],
+    "skipped_reason": null
   },
   {
-    "sentence": "A Convolutional Neural Network is a subclass of Deep Learning model.",
+    "sentence": "The Transformer architecture implements self-attention mechanisms.",
     "triplets": [
-      ["Convolutional Neural Network", "deep learning model", "is a subclass of"]
-    ]
+      [
+        "Transformer architecture",
+        "self-attention mechanisms",
+        "Implements"
+      ]
+    ],
+    "skipped_reason": null
   },
   {
-    "sentence": "The Transformer architecture relies on self-attention mechanisms.",
+    "sentence": "Train-test splitting might introduce bias.",
     "triplets": [
-      ["Transformer architecture", "self-attention mechanisms", "relies on"]
-    ]
+      [
+        "train-test splitting",
+        "bias",
+        "MightIntroduce"
+      ]
+    ],
+    "skipped_reason": null
   },
   {
-    "sentence": "It is unlikely that this algorithm will converge for very noisy data.",
+    "sentence": "Bias is a threat to fairness.",
     "triplets": [
-      ["algorithm", "very noisy data", "is unlikely to converge for"]
-    ]
+      [
+        "bias",
+        "fairness",
+        "IsThreatTo"
+      ]
+    ],
+    "skipped_reason": null
   },
   {
-    "sentence": "If the model overfits, it may fail to generalize to new data.",
+    "sentence": "Fairness is a dimension of trustworthy AI.",
     "triplets": [
-      ["model", "overfits", "may"],
-      ["model", "new data", "may fail to generalize to"]
-    ]
+      [
+        "Fairness",
+        "trustworthy AI",
+        "IsDimensionOf"
+      ]
+    ],
+    "skipped_reason": null
   },
   {
-    "sentence": "The exam inspection allows students to review their graded exams.",
-    "triplets": [
-      ["exam inspection", "graded exams", "allows students to review"],
-      ["students", "graded exams", "can review"]
-    ]
+    "sentence": "The paragraph is broadly motivational and does not state a supported relationship.",
+    "triplets": [],
+    "skipped_reason": "No allowed relationship type accurately represents the sentence."
   }
 ]

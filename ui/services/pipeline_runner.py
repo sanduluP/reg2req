@@ -31,6 +31,47 @@ from ui.services.job_store import JOB_STORE, JobProgressStage
 from ui.services.json_sanitize import to_jsonable
 from ui.services.progress_callbacks import init_stage, make_job_progress_callback
 
+
+def _source_context_lookup(decomposer_log: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    Build quality text -> source paragraph context lookup for UI popovers.
+    """
+    lookup: Dict[str, Dict[str, Any]] = {}
+    entries = decomposer_log.get("quality_sources")
+    if not isinstance(entries, list):
+        return lookup
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        quality = str(entry.get("quality") or "").strip()
+        source_text = str(entry.get("source_text") or "").strip()
+        if not quality or not source_text or quality in lookup:
+            continue
+
+        context: Dict[str, Any] = {
+            "source_doc_index": entry.get("source_doc_index"),
+            "source_text": source_text,
+        }
+        metadata = entry.get("metadata")
+        if isinstance(metadata, dict) and metadata:
+            context["metadata"] = metadata
+
+        lookup[quality] = context
+
+    return lookup
+
+
+def _attach_source_context(items: list[Dict[str, Any]], lookup: Dict[str, Dict[str, Any]]) -> None:
+    """
+    Mutate novelty result items with source paragraph context for the frontend.
+    """
+    for item in items:
+        quality = str(item.get("quality") or "").strip()
+        context = lookup.get(quality)
+        if context:
+            item["source_context"] = context
+
 def run_pipeline(
     *,
     job_id: str,
@@ -91,6 +132,8 @@ def run_pipeline(
     keybert_result, keybert_log = filter_paragraphs_by_keyword(
         paragraphs=paragraphs,
         search_keyword=keyword,
+        config=cfg.keybert,
+        synonyms_enabled=cfg.keyword_synonyms_enabled,
         progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
     )
         
@@ -102,7 +145,7 @@ def run_pipeline(
     # NOTE: total here depends on our decomposer loop granularity:
     # - if progress reports batches: total = num_batches
     # - if progress reports paragraphs: total = len(matched_docs)
-    num_batches = math.ceil(len(matched_docs) / 5) # TODO: change 5 if batch size changed!
+    num_batches = math.ceil(len(matched_docs) / cfg.decomposer_batch_size)
     init_stage(
         job_id=job_id,
         stage="DecomposerLLM",
@@ -113,8 +156,12 @@ def run_pipeline(
 
     qualities, decomposer_log = decompose_paragraphs_to_qualities(
         paragraphs=list(matched_docs),
+        batch_size=cfg.decomposer_batch_size,
+        parallel=cfg.decomposer_parallel,
+        max_workers=cfg.decomposer_max_workers,
         progress=make_job_progress_callback(job_id=job_id, stage="DecomposerLLM")
     )
+    quality_source_lookup = _source_context_lookup(decomposer_log)
 
     # ---------------------------------------------------------------------
     # Stage 3: Quality-to-Subgraph similarity filter (needs KG relations)
@@ -147,13 +194,16 @@ def run_pipeline(
     # ---------------------------------------------------------------------
     # Stage 4: Novelty decision (LLM comparator)
     # ---------------------------------------------------------------------
-    batch_size = 5  # TODO: move to cfg if you want (cfg.novelty_batch_size)
+    batch_size = cfg.novelty_batch_size
     num_batches = math.ceil(len(kept) / batch_size) if kept else 0
 
     init_stage(
         job_id=job_id,
         stage="NoveltyLLM",
-        message=f"🧑🏻‍⚖️ Novelty comparator: classifying {len(kept)} kept qualities...",
+        message=(
+            f"🧑🏻‍⚖️ Novelty comparator: classifying {len(kept)} kept qualities "
+            f"(batch size={batch_size}, parallel={cfg.novelty_parallel}, workers={cfg.novelty_max_workers})..."
+        ),
         current=0,
         total=max(num_batches, 1),  # avoid total=0 in UI
     )
@@ -164,9 +214,15 @@ def run_pipeline(
         temperature=cfg.novelty_llm_temperature,
         use_batch=True,
         batch_size=batch_size,
+        parallel=cfg.novelty_parallel,
+        max_workers=cfg.novelty_max_workers,
         pretty_print=False,
         progress=make_job_progress_callback(job_id=job_id, stage="NoveltyLLM"),
     )
+
+    novelty_results = novelty_log.get("results")
+    if isinstance(novelty_results, list):
+        _attach_source_context(novelty_results, quality_source_lookup)
 
 
     response: Dict[JobProgressStage | str, Dict] = {

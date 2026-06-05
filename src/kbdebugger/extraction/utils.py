@@ -2,7 +2,7 @@ import os
 from random import random
 import re
 from time import time
-from typing import Any, Callable, List, Optional, TypeVar
+from typing import Any, Callable, List, Optional, Sequence, TypeVar
 
 from kbdebugger.novelty.types import NoveltyDecision
 from kbdebugger.types import ExtractionResult, TripletSubjectObjectPredicate
@@ -12,26 +12,65 @@ from .types import Qualities
 from typing import Any, Dict
 
 
-def coerce_triplets(item: Dict[str, Any], fallback_sentence: str) -> ExtractionResult:
+def _predicate_set(allowed_predicates: Optional[Sequence[str]]) -> set[str] | None:
+    if allowed_predicates is None:
+        return None
+    return {p.strip() for p in allowed_predicates if isinstance(p, str) and p.strip()}
+
+
+def coerce_triplets(
+    item: Dict[str, Any],
+    fallback_sentence: str,
+    *,
+    allowed_predicates: Optional[Sequence[str]] = None,
+) -> ExtractionResult:
     """
-    Coerce a single item dict to ExtractionResult:
-    { "sentence": str, "triplets": list[TripletSubjectObjectPredicate] }
+    Coerce a single item dict to ExtractionResult and drop predicates outside
+    the allowed ontology when an allowed predicate list is provided.
     """
     sentence = item.get("sentence", fallback_sentence)
     raw_triplets = item.get("triplets", [])
+    allowed = _predicate_set(allowed_predicates)
     triplets: list[TripletSubjectObjectPredicate] = []
+    rejected_predicates: list[str] = []
 
     if isinstance(raw_triplets, list):
         for t in raw_triplets:
             if isinstance(t, (list, tuple)) and len(t) == 3:
                 subj, obj, rel = t
                 if all(isinstance(x, str) for x in (subj, obj, rel)):
-                    triplets.append((subj.strip(), obj.strip(), rel.strip()))
+                    subj_clean = subj.strip()
+                    obj_clean = obj.strip()
+                    rel_clean = rel.strip()
+                    if not (subj_clean and obj_clean and rel_clean):
+                        continue
+                    if allowed is not None and rel_clean not in allowed:
+                        rejected_predicates.append(rel_clean)
+                        continue
+                    triplets.append((subj_clean, obj_clean, rel_clean))
 
-    return {"sentence": str(sentence), "triplets": triplets}
+    result: ExtractionResult = {"sentence": str(sentence), "triplets": triplets}
+    skipped_reason_raw = item.get("skipped_reason")
+    skipped_reason = str(skipped_reason_raw).strip() if skipped_reason_raw else ""
+
+    if skipped_reason:
+        result["skipped_reason"] = skipped_reason
+    elif allowed is not None and not triplets:
+        if rejected_predicates:
+            rejected = ", ".join(sorted(set(rejected_predicates)))
+            result["skipped_reason"] = f"No extracted predicate matched the allowed relationship types. Rejected: {rejected}."
+        else:
+            result["skipped_reason"] = "No allowed relationship type fit this quality."
+
+    return result
 
 
-def coerce_triplets_batch(obj: Dict[str, Any], sentences: List[str]) -> List[ExtractionResult]:
+def coerce_triplets_batch(
+    obj: Dict[str, Any],
+    sentences: List[str],
+    *,
+    allowed_predicates: Optional[Sequence[str]] = None,
+) -> List[ExtractionResult]:
     """
     Coerce the LLM batch output of shape:
     {
@@ -42,27 +81,31 @@ def coerce_triplets_batch(obj: Dict[str, Any], sentences: List[str]) -> List[Ext
     }
     into a list[ExtractionResult], aligned by input index.
     """
-    # Default: one empty result per input sentence
-    empty: ExtractionResult = {"sentence": "", "triplets": []}
-    results: List[ExtractionResult] = [empty for _ in sentences]
+    results: List[ExtractionResult] = [{"sentence": "", "triplets": []} for _ in sentences]
 
     batch = obj.get("triplets_batch", [])
     if not isinstance(batch, list):
-        return results
+        return [{"sentence": s, "triplets": [], "skipped_reason": "The LLM did not return a triplets_batch array."} for s in sentences]
 
-    # Map by id, but also be robust
     for item in batch:
         if not isinstance(item, dict):
             continue
 
         idx = item.get("id")
         if isinstance(idx, int) and 0 <= idx < len(sentences):
-            results[idx] = coerce_triplets(item, sentences[idx])
+            results[idx] = coerce_triplets(
+                item,
+                sentences[idx],
+                allowed_predicates=allowed_predicates,
+            )
 
-    # Fill any missing entries with fallback (no triplets)
     for i, res in enumerate(results):
         if res["sentence"] == "":
-            results[i] = {"sentence": sentences[i], "triplets": []}
+            results[i] = {
+                "sentence": sentences[i],
+                "triplets": [],
+                "skipped_reason": "The LLM did not return a result for this quality.",
+            }
 
     return results
 
