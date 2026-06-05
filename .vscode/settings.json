@@ -14,5 +14,14 @@
     "reportAttributeAccessIssue": "none",
     "reportCallIssue": "none",
     "reportMissingImports": "none"
+  },
+  "files.exclude": {
+    "**/logs": true
+  },
+  "files.watcherExclude": {
+    "**/logs/**": true
+  },
+  "search.exclude": {
+    "**/logs": true
   }
 }
