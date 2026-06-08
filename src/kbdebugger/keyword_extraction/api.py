@@ -17,6 +17,10 @@ def filter_paragraphs_by_keyword(
     max_synonyms: int = 10,
     config: Optional[KeyBERTConfig] = None,
     synonyms_enabled: bool = True,
+    synonym_cache_enabled: bool | None = None,
+    synonym_cache_path: str | None = None,
+    synonym_defaults_path: str | None = None,
+    synonym_cache_write: bool | None = None,
     progress: Optional[ProgressCallback] = None,
 ) -> tuple[
         KeywordDocMatchResult,
@@ -51,7 +55,17 @@ def filter_paragraphs_by_keyword(
         Matched/unmatched paragraphs plus the synonyms that were used.
     """
     cfg = config or KeyBERTConfig()
-    synonyms = generate_synonyms_for_keyword(search_keyword) if synonyms_enabled else []
+    synonyms = (
+        generate_synonyms_for_keyword(
+            search_keyword,
+            cache_enabled=synonym_cache_enabled,
+            cache_path=synonym_cache_path,
+            defaults_path=synonym_defaults_path,
+            cache_write=synonym_cache_write,
+        )
+        if synonyms_enabled
+        else []
+    )
     if max_synonyms and len(synonyms) > max_synonyms:
         synonyms = synonyms[:max_synonyms]
 

@@ -14,7 +14,7 @@ from kbdebugger.utils.json import write_json
 from kbdebugger.utils.time import now_utc_compact
 from .utils import normalize_text
 
-MatchPattern = Literal["source_label", "target_label", "rel_props"]
+MatchPattern = Literal["source_name", "target_name", "rel_props"]
 
 class RetrievedRelation(TypedDict):
     relation: GraphRelation
@@ -44,15 +44,15 @@ class KnowledgeGraphRetriever:
 
         results: list[RetrievedRelation] = []
 
-        # --- Pattern 1: keyword in source node label ---
+        # --- Pattern 1: keyword in source node name ---
         rels = graph.query_relations(
             """
-            MATCH (n:Node)-[r:REL]->(m:Node)
-            WHERE toLower(n.label) CONTAINS $keyword
+            MATCH (n:Node)-[r]->(m:Node)
+            WHERE toLower(n.name) CONTAINS $keyword
             RETURN
-              n.label AS source,
-              m.label AS target,
-              coalesce(r.type, r.label, 'REL') AS predicate,
+              n.name AS source,
+              m.name AS target,
+              type(r) AS predicate,
               properties(r) AS props,
 
               elementId(n) AS source_id,
@@ -62,18 +62,18 @@ class KnowledgeGraphRetriever:
             """,
             {"keyword": kw, "limit": limit},
         )
-        results.extend({"relation": rel, "match_pattern": "source_label"} for rel in rels)
+        results.extend({"relation": rel, "match_pattern": "source_name"} for rel in rels)
 
 
-        # --- Pattern 2: keyword in target node label ---
+        # --- Pattern 2: keyword in target node name ---
         rels = graph.query_relations(
             """
-            MATCH (n:Node)-[r:REL]->(m:Node)
-            WHERE toLower(m.label) CONTAINS $keyword
+            MATCH (n:Node)-[r]->(m:Node)
+            WHERE toLower(m.name) CONTAINS $keyword
             RETURN
-              n.label AS source,
-              m.label AS target,
-              coalesce(r.type, r.label, 'REL') AS predicate,
+              n.name AS source,
+              m.name AS target,
+              type(r) AS predicate,
               properties(r) AS props,
 
               elementId(n) AS source_id,
@@ -83,21 +83,21 @@ class KnowledgeGraphRetriever:
             """,
             {"keyword": kw, "limit": limit},
         )
-        results.extend({"relation": rel, "match_pattern": "target_label"} for rel in rels)
+        results.extend({"relation": rel, "match_pattern": "target_name"} for rel in rels)
 
-        # --- Pattern 3: keyword in relationship "semantic" fields ---
-        # We avoid fancy APOC here; just check the usual fields you write.
+        # --- Pattern 3: keyword in Dorian relationship type or provenance fields ---
         rels = graph.query_relations(
             """
-            MATCH (n:Node)-[r:REL]->(m:Node)
+            MATCH (n:Node)-[r]->(m:Node)
             WHERE
-                toLower(coalesce(r.type, ""))              CONTAINS $keyword OR
-                toLower(coalesce(r.label, ""))             CONTAINS $keyword OR
+                toLower(type(r))                            CONTAINS $keyword OR
+                toLower(replace(type(r), "_", " "))        CONTAINS $keyword OR
+                toLower(coalesce(r.sentence, ""))          CONTAINS $keyword OR
                 toLower(coalesce(r.source, ""))            CONTAINS $keyword
             RETURN
-                n.label AS source,
-                m.label AS target,
-                coalesce(r.type, r.label, 'REL') AS predicate,
+                n.name AS source,
+                m.name AS target,
+                type(r) AS predicate,
                 properties(r) AS props,
 
                 elementId(n) AS source_id,

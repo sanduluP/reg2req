@@ -8,11 +8,11 @@ from typing_extensions import LiteralString
 from dotenv import load_dotenv
 from rich.progress import track
 
-from neo4j import GraphDatabase, Driver, Query
+from neo4j import GraphDatabase, Driver
 from neo4j.exceptions import Neo4jError
 
-from kbdebugger.types import GraphRelation, EdgeProperties
-from .utils import rows_to_graph_relations
+from kbdebugger.types import GraphRelation
+from .utils import predicate_to_dorian_relationship_type, rows_to_graph_relations
 from .types import BatchUpsertSummary
 from .aura_api import ensure_aura_running_from_env 
 
@@ -100,7 +100,6 @@ class GraphStore:
         try:
             with self.driver.session() as session:
                 cypher_as_literal_str = cast(LiteralString, cypher)
-                # result = session.run(Query(cypher), params or {})
                 result = session.run(cypher_as_literal_str, params or {})
                 return [record.data() for record in result]
         except Neo4jError as e:
@@ -147,110 +146,59 @@ class GraphStore:
     # ---------- high-level write API ----------
     def upsert_relation(self, relation: GraphRelation) -> list[dict[str, Any]]:
         """
-        Insert or update a single GraphRelation into Neo4j.
+        Insert or update a single GraphRelation using Dorian-style Neo4j.
 
-        - Nodes are always `(:Node {label: ...})`
-        - Relationships are always `[:REL {label: ..., ...}]`
-        - Dedupe is based on (`source_label`, `target_label`, `rel.label`, `edge.properties['source']`)
-            - i.e., we assume that the same relation from the same source text is the same fact.
-
-        Example relation:
-        ```
-            relation = {
-                'source': {
-                    'label': 'Monitoring'
-                },
-                'target': {
-                    'label': 'KI system'
-                },
-                'edge': {
-                    'label': 'is performed during operation of',
-                    'properties': {
-                        'sentence': 'Monitoring is performed during operation of KI system',
-                        'source': '20241015_MISSION_KI_Glossar_v1.0 en.pdf',
-                        'page_number': 1,
-                        'start_index': 0
-                    }
-                },
-            }
-        ```
+        - Nodes are stored as `(:Node {name: ...})`
+        - Predicates are stored as real relationship types, e.g. `:has_parameter`
+        - Provenance remains on the relationship as properties
+        - Dedupe is based on source node, target node, relationship type, and
+          the provenance `source` property when present
         """
+        src_name = str(relation["source"]["label"]).strip()
+        tgt_name = str(relation["target"]["label"]).strip()
+        rel_label = str(relation["edge"]["label"]).strip()
 
-        src_label = relation["source"]["label"]
-        tgt_label = relation["target"]["label"]
-        rel_label = relation["edge"]["label"]
-        props_all = relation["edge"]["properties"]
+        if not src_name or not tgt_name:
+            raise ValueError("GraphRelation source and target labels must be non-empty.")
 
-        # Key used to *match* existing relationships (dedupe policy)
-        rel_key_props: EdgeProperties = {
-            "label": rel_label,
-            "source": props_all.get("source", ""),
-            # Add more fields here if we want stricter deduplication
+        rel_type = predicate_to_dorian_relationship_type(rel_label)
+
+        raw_props = relation["edge"].get("properties") or {}
+        props_all = {
+            str(k): v
+            for k, v in raw_props.items()
+            if v is not None and str(k) not in {"label", "type"}
         }
-        # ⚠️ remember: the rel_key_props are the props of the relationship used to find existing rels!
-        # so choose them carefully to avoid over- or under-merging.
-
-        # Why this is safer
-        # - We won't create a new rel just because page_number or some metadata changed.
-        # - We still persist all the rich properties on first create, and can update on matches.
 
         now_iso = datetime.now(timezone.utc).isoformat()
+        rel_source_key = str(props_all.get("source", ""))
 
-        # Properties set only when a relationship is first created
-        on_create_props: EdgeProperties = {
+        on_create_props = {
             **props_all,
+            "source": rel_source_key,
             "created_at": now_iso,
+            "last_updated_at": now_iso,
         }
-
-        # Properties updated whenever we re-encounter the same relationship
         on_match_props = {
+            **props_all,
+            "source": rel_source_key,
             "last_updated_at": now_iso,
         }
 
-        """
-        apoc.merge.relationship is a Neo4j APOC procedure used to dynamically merge or create a relationship between two nodes, which either exists or is created based on the provided parameters. 
-        It handles dynamic relationship types and properties for creation or matching, and its signature is apoc.merge.relationship(
-            startNode, 
-            relType,        # e.g., "REL"
-            relKeyProps,    # properties used to identify existing relationships
-            onCREATEProps,  # properties set only when a new relationship is created
-            endNode, 
-            onMatchProps    # properties updated when a relationship already exists
-        ). 
-        This is useful for building Cypher queries where the relationship details are provided as parameters, for example, when unwinding a list of rows.
-        """
-        
-        # About {} vs {{}}
-        # - In a plain triple-quoted Python string (""" ... """), {} is just literal braces — fine.
-        # - In an f-string (f""" ... """), {} is interpolation. To emit literal braces, we must escape as {{}}.
-        # So:
-        # - If we keep it as a plain string: """ ... {} ... """ is OK.
-        # - If we switch to f""" ... """: change to {{}}.
-
-        cypher = """
-        MERGE (s:Node {label: $source_label})
+        cypher = f"""
+        MERGE (s:Node {{name: $source_name}})
         ON CREATE SET s.created_at = datetime()
         SET s.last_updated_at = datetime(),
             s.created_at = coalesce(s.created_at, datetime())
 
-        MERGE (t:Node {label: $target_label})
+        MERGE (t:Node {{name: $target_name}})
         ON CREATE SET t.created_at = datetime()
         SET t.last_updated_at = datetime(),
             t.created_at = coalesce(t.created_at, datetime())
 
-        WITH s, t
-        CALL apoc.merge.relationship(
-            s,
-            $rel_type,
-            $rel_key_props,
-            $on_create,
-            t,
-            $on_match
-        ) YIELD rel
-
-        // ensure temporal props exist on the rel too
-        SET rel.created_at    = coalesce(rel.created_at, datetime()),
-            rel.last_updated_at = datetime()
+        MERGE (s)-[rel:`{rel_type}` {{source: $rel_source_key}}]->(t)
+        ON CREATE SET rel += $on_create
+        ON MATCH SET rel += $on_match
 
         RETURN s, t, rel
         """
@@ -258,12 +206,11 @@ class GraphStore:
         return self.query(
             cypher,
             params={
-                "source_label": src_label,
-                "target_label": tgt_label,
-                "rel_type": "REL", # always 'REL' as the relationship type; actual label is in properties
-                "rel_key_props": rel_key_props,
-                "on_create": on_create_props, # set only on create of the relationship
-                "on_match": on_match_props, # set only on match (update) of the relationship
+                "source_name": src_name,
+                "target_name": tgt_name,
+                "rel_source_key": rel_source_key,
+                "on_create": on_create_props,
+                "on_match": on_match_props,
             },
         )
 
@@ -295,7 +242,8 @@ class GraphStore:
         Notes
         -----
         - This method performs no client-side deduplication.
-          Deduplication is handled inside `upsert_relation()` via the APOC merge policy.
+          Deduplication is handled inside `upsert_relation()` via Dorian-style
+          typed relationship MERGE semantics.
         - If you later want "fail-fast" semantics, add a flag like `stop_on_error`.
         """
         if not relations:

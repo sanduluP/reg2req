@@ -1,18 +1,49 @@
-from kbdebugger.types import EdgeProperties, ExtractionResult, GraphRelation
+import re
+from typing import Any, Iterable, List, Mapping, Optional
+
 from kbdebugger.compat.langchain import Document
-from typing import List, Iterable, Mapping, Any, Optional
-from datetime import datetime
+from kbdebugger.extraction.predicate_options import DEFAULT_ALLOWED_PREDICATES
+from kbdebugger.types import EdgeProperties, ExtractionResult, GraphRelation
+
+
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<!^)(?=[A-Z])")
+_SAFE_REL_TYPE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_ALLOWED_PREDICATE_TYPES: dict[str, str] = {
+    predicate: _CAMEL_BOUNDARY_RE.sub("_", predicate).lower()
+    for predicate in DEFAULT_ALLOWED_PREDICATES
+}
 
 
 def normalize_text(text: str) -> str:
     """
-    Normalize a free-text label into a safe identifier:
+    Normalize a free-text label into a search key:
     - lowercase
-    - strip punctuation at edges
+    - collapse whitespace
     """
     clean = " ".join(text.strip().split()).lower()
     # clean = clean.replace(" ", "_")
     return clean
+
+
+def normalize_graph_name(text: str) -> str:
+    """Preserve Dorian-style node names while trimming whitespace noise."""
+    return " ".join(str(text).strip().split())
+
+
+def predicate_to_dorian_relationship_type(predicate: str) -> str:
+    """
+    Convert an allowed KBExtraction predicate to Dorian's Neo4j rel type.
+
+    The relationship type is safe to inject into Cypher only after this whitelist
+    check succeeds.
+    """
+    raw = str(predicate).strip()
+    rel_type = _ALLOWED_PREDICATE_TYPES.get(raw)
+    if rel_type is None:
+        raise ValueError(f"Unsupported predicate for Dorian Neo4j schema: {predicate!r}")
+    if not _SAFE_REL_TYPE_RE.fullmatch(rel_type):
+        raise ValueError(f"Unsafe Neo4j relationship type generated for predicate {predicate!r}: {rel_type!r}")
+    return rel_type
 
 
 def map_doc_extracted_triplets_to_graph_relations(
@@ -45,9 +76,9 @@ def map_doc_extracted_triplets_to_graph_relations(
         #     props["sentence"] = sentence_text
 
         rels.append({
-            "source": { "label": normalize_text(subj) },
-            "target": { "label": normalize_text(obj) },
-            "edge":   { "label": normalize_text(rel), "properties": props },
+            "source": { "label": normalize_graph_name(subj) },
+            "target": { "label": normalize_graph_name(obj) },
+            "edge":   { "label": str(rel).strip(), "properties": props },
         }) # type: ignore
 
     return rels
@@ -78,9 +109,9 @@ def map_extracted_triplets_to_graph_relations(
         }
 
         rels.append({
-            "source": { "label": normalize_text(subj) },
-            "target": { "label": normalize_text(obj) },
-            "edge":   { "label": normalize_text(rel), "properties": props },
+            "source": { "label": normalize_graph_name(subj) },
+            "target": { "label": normalize_graph_name(obj) },
+            "edge":   { "label": str(rel).strip(), "properties": props },
         }) # type: ignore
 
     return rels
@@ -111,12 +142,6 @@ def rows_to_graph_relations(
 
         props: EdgeProperties = {**props_raw}  # type: ignore[misc]
 
-        # Optional: keep predicate redundantly in properties for provenance/compat
-        # (only if you want this invariant)
-        props.setdefault("label", predicate)
-
-
-        now = datetime.now().isoformat()
         rels.append(
             {
                 "source": {

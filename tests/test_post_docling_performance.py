@@ -19,6 +19,10 @@ def test_pipeline_config_post_docling_defaults(monkeypatch: pytest.MonkeyPatch) 
         "KB_KEYBERT_BATCH_SIZE",
         "KB_KEYBERT_TOP_N",
         "KB_KEYWORD_SYNONYMS_ENABLED",
+        "KB_KEYWORD_SYNONYM_CACHE_ENABLED",
+        "KB_KEYWORD_SYNONYM_CACHE_PATH",
+        "KB_KEYWORD_SYNONYM_DEFAULTS_PATH",
+        "KB_KEYWORD_SYNONYM_CACHE_WRITE",
         "KB_DECOMPOSER_PARALLEL",
         "KB_DECOMPOSER_MAX_WORKERS",
         "KB_DECOMPOSER_BATCH_SIZE",
@@ -36,6 +40,10 @@ def test_pipeline_config_post_docling_defaults(monkeypatch: pytest.MonkeyPatch) 
     assert cfg.keybert.batch_size == 32
     assert cfg.keybert.top_n_keywords_per_paragraph == 8
     assert cfg.keyword_synonyms_enabled is True
+    assert cfg.keyword_synonym_cache_enabled is True
+    assert cfg.keyword_synonym_cache_path == "runtime/keyword_synonyms_cache.json"
+    assert cfg.keyword_synonym_defaults_path == "data/keyword_synonyms.json"
+    assert cfg.keyword_synonym_cache_write is True
     assert cfg.decomposer_parallel is True
     assert cfg.decomposer_max_workers == 2
     assert cfg.decomposer_batch_size == 5
@@ -71,20 +79,133 @@ def test_synonyms_disabled_skips_llm_call(monkeypatch: pytest.MonkeyPatch) -> No
     assert log_payload == {"generated_synonyms": []}
 
 
-def test_synonym_generation_falls_back_when_llm_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_synonym_cache_hit_skips_llm_call(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     from kbdebugger.keyword_extraction import keyword_synonyms
 
     keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+    cache_path = tmp_path / "cache.json"
+    defaults_path = tmp_path / "defaults.json"
+    cache_path.write_text('{"explainability": ["cached interpretability", "cached transparency"]}')
+    defaults_path.write_text("{}")
+
+    def fail_respond(*_args, **_kwargs):
+        raise AssertionError("LLM should not be called on runtime cache hit")
+
+    monkeypatch.setattr(keyword_synonyms, "respond", fail_respond)
+
+    synonyms = keyword_synonyms.generate_synonyms_for_keyword(
+        "Explainability",
+        cache_path=cache_path,
+        defaults_path=defaults_path,
+    )
+
+    assert synonyms == ["cached interpretability", "cached transparency"]
+
+
+def test_curated_synonym_defaults_skip_llm_call(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from kbdebugger.keyword_extraction import keyword_synonyms
+
+    keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+    defaults_path = tmp_path / "defaults.json"
+    defaults_path.write_text('{"model governance": ["model oversight", "model control"]}')
+
+    def fail_respond(*_args, **_kwargs):
+        raise AssertionError("LLM should not be called on curated default hit")
+
+    monkeypatch.setattr(keyword_synonyms, "respond", fail_respond)
+
+    synonyms = keyword_synonyms.generate_synonyms_for_keyword(
+        "Model Governance",
+        cache_path=tmp_path / "missing-cache.json",
+        defaults_path=defaults_path,
+    )
+
+    assert synonyms == ["model oversight", "model control"]
+
+
+def test_cache_miss_calls_llm_once_writes_json_and_reuses_cache(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from kbdebugger.keyword_extraction import keyword_synonyms
+
+    keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+    cache_path = tmp_path / "cache.json"
+    defaults_path = tmp_path / "defaults.json"
+    defaults_path.write_text("{}")
+    calls = {"count": 0}
+
+    def fake_respond(*_args, **_kwargs):
+        calls["count"] += 1
+        return '{"synonyms": ["semantic clarity", "concept explanation"]}'
+
+    monkeypatch.setattr(keyword_synonyms, "respond", fake_respond)
+
+    synonyms = keyword_synonyms.generate_synonyms_for_keyword(
+        "semantic clarity topic",
+        cache_path=cache_path,
+        defaults_path=defaults_path,
+    )
+
+    assert synonyms == ["semantic clarity", "concept explanation"]
+    assert calls["count"] == 1
+    assert "semantic clarity topic" in cache_path.read_text()
+
+    keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+
+    def fail_respond(*_args, **_kwargs):
+        raise AssertionError("LLM should not be called after cache file is written")
+
+    monkeypatch.setattr(keyword_synonyms, "respond", fail_respond)
+
+    cached_again = keyword_synonyms.generate_synonyms_for_keyword(
+        "Semantic Clarity Topic",
+        cache_path=cache_path,
+        defaults_path=defaults_path,
+    )
+
+    assert cached_again == synonyms
+
+
+def test_malformed_synonym_cache_falls_back_safely(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from kbdebugger.keyword_extraction import keyword_synonyms
+
+    keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+    cache_path = tmp_path / "cache.json"
+    defaults_path = tmp_path / "defaults.json"
+    cache_path.write_text("{not valid json")
+    defaults_path.write_text('{"auditability": ["audit readiness", "traceability"]}')
+
+    def fail_respond(*_args, **_kwargs):
+        raise AssertionError("LLM should not be called when defaults handle malformed cache")
+
+    monkeypatch.setattr(keyword_synonyms, "respond", fail_respond)
+
+    synonyms = keyword_synonyms.generate_synonyms_for_keyword(
+        "Auditability",
+        cache_path=cache_path,
+        defaults_path=defaults_path,
+    )
+
+    assert synonyms == ["audit readiness", "traceability"]
+
+
+def test_synonym_generation_uses_morphology_fallback_when_llm_fails(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from kbdebugger.keyword_extraction import keyword_synonyms
+
+    keyword_synonyms._generate_synonyms_for_normalized_keyword.cache_clear()
+    defaults_path = tmp_path / "defaults.json"
+    defaults_path.write_text("{}")
 
     def fail_respond(*_args, **_kwargs):
         raise RuntimeError("LLM response did not contain final assistant content")
 
     monkeypatch.setattr(keyword_synonyms, "respond", fail_respond)
 
-    synonyms = keyword_synonyms.generate_synonyms_for_keyword("Explainability")
+    synonyms = keyword_synonyms.generate_synonyms_for_keyword(
+        "Inspectability",
+        cache_path=tmp_path / "cache.json",
+        defaults_path=defaults_path,
+    )
 
-    assert "interpretability" in synonyms
-    assert "understandability" in synonyms
+    assert "inspectable" in synonyms
     assert len(synonyms) <= 10
 
 

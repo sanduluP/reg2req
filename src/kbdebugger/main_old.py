@@ -91,20 +91,10 @@ def get_similar(
                 Retriever = build_retriever(documents)
                 RETRIEVING_APPROACH = "Hybrid Retrieval"
 
-    # Old:
-    # Cypher_query = """ 
-    #         MATCH (n)-[r:is]->(req:Node{label:"requirement"}) 
-    #         RETURN DISTINCT r.sentence  as sentence
-    #     """
-
-    # New
-    # cypher_query = """ 
-    #         MATCH (n)-[r:REL]->(req:Node{label:"requirement"}) 
-    #         RETURN DISTINCT r.sentence as sentence
-    #     """
     cypher_query = textwrap.dedent("""
-        MATCH ()-[r:REL]->(n:Node{label:"requirement"})
-        WHERE r.sentence IS NOT NULL
+        MATCH ()-[r]->(n:Node)
+        WHERE toLower(n.name) = "requirement"
+          AND r.sentence IS NOT NULL
         RETURN DISTINCT r.sentence AS sentence
     """).strip()
 

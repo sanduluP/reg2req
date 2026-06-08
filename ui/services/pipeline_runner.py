@@ -134,6 +134,10 @@ def run_pipeline(
         search_keyword=keyword,
         config=cfg.keybert,
         synonyms_enabled=cfg.keyword_synonyms_enabled,
+        synonym_cache_enabled=cfg.keyword_synonym_cache_enabled,
+        synonym_cache_path=cfg.keyword_synonym_cache_path,
+        synonym_defaults_path=cfg.keyword_synonym_defaults_path,
+        synonym_cache_write=cfg.keyword_synonym_cache_write,
         progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
     )
         

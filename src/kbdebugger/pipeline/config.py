@@ -131,6 +131,26 @@ class PipelineConfig:
             Maximum n-gram length for KeyBERT entity/keyphrase extraction.
             Default: 3
 
+        KB_KEYWORD_SYNONYMS_ENABLED:
+            Full off switch for keyword synonym expansion.
+            Default: true
+
+        KB_KEYWORD_SYNONYM_CACHE_ENABLED:
+            Read persistent runtime/cache synonyms before calling the LLM.
+            Default: true
+
+        KB_KEYWORD_SYNONYM_CACHE_PATH:
+            Runtime JSON cache for LLM-generated synonyms.
+            Default: runtime/keyword_synonyms_cache.json
+
+        KB_KEYWORD_SYNONYM_DEFAULTS_PATH:
+            Versioned curated synonym defaults.
+            Default: data/keyword_synonyms.json
+
+        KB_KEYWORD_SYNONYM_CACHE_WRITE:
+            Write successful LLM synonym generations to the runtime cache.
+            Default: true
+
     4️⃣ Novelty comparator (LLM):
         KB_NOVELTY_LLM_MAX_TOKENS:
             Max tokens for novelty decision response.
@@ -191,6 +211,10 @@ class PipelineConfig:
     # ----------------------------
     keybert: KeyBERTConfig
     keyword_synonyms_enabled: bool
+    keyword_synonym_cache_enabled: bool
+    keyword_synonym_cache_path: str
+    keyword_synonym_defaults_path: str
+    keyword_synonym_cache_write: bool
 
     # ----------------------------
     # LLM decomposer
@@ -274,6 +298,16 @@ class PipelineConfig:
         keybert_top_n = int(os.getenv("KB_KEYBERT_TOP_N", "8").strip())
         keybert_top_n = max(1, keybert_top_n)
         keyword_synonyms_enabled = _env_bool("KB_KEYWORD_SYNONYMS_ENABLED", True)
+        keyword_synonym_cache_enabled = _env_bool("KB_KEYWORD_SYNONYM_CACHE_ENABLED", True)
+        keyword_synonym_cache_path = os.getenv(
+            "KB_KEYWORD_SYNONYM_CACHE_PATH",
+            "runtime/keyword_synonyms_cache.json",
+        ).strip()
+        keyword_synonym_defaults_path = os.getenv(
+            "KB_KEYWORD_SYNONYM_DEFAULTS_PATH",
+            "data/keyword_synonyms.json",
+        ).strip()
+        keyword_synonym_cache_write = _env_bool("KB_KEYWORD_SYNONYM_CACHE_WRITE", True)
 
         keybert = KeyBERTConfig(
             embedding_model=keybert_model_name,
@@ -392,6 +426,10 @@ class PipelineConfig:
             vector_similarity=vector_similarity,
             keybert=keybert,
             keyword_synonyms_enabled=keyword_synonyms_enabled,
+            keyword_synonym_cache_enabled=keyword_synonym_cache_enabled,
+            keyword_synonym_cache_path=keyword_synonym_cache_path,
+            keyword_synonym_defaults_path=keyword_synonym_defaults_path,
+            keyword_synonym_cache_write=keyword_synonym_cache_write,
             decomposer_parallel=decomposer_parallel,
             decomposer_max_workers=decomposer_max_workers,
             decomposer_batch_size=decomposer_batch_size,

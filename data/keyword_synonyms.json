@@ -1,0 +1,122 @@
+{
+  "accountability": [
+    "responsibility",
+    "answerability",
+    "auditability",
+    "traceability",
+    "governance",
+    "oversight",
+    "liability",
+    "accountable"
+  ],
+  "data governance": [
+    "data management",
+    "data stewardship",
+    "data oversight",
+    "data control",
+    "data policy",
+    "data quality management",
+    "metadata management"
+  ],
+  "diversity": [
+    "inclusion",
+    "representation",
+    "variety",
+    "heterogeneity",
+    "plurality",
+    "demographic diversity"
+  ],
+  "environmental wellbeing": [
+    "environmental sustainability",
+    "sustainability",
+    "ecological impact",
+    "environmental impact",
+    "resource efficiency",
+    "energy efficiency"
+  ],
+  "explainability": [
+    "interpretability",
+    "transparency",
+    "understandability",
+    "comprehensibility",
+    "intelligibility",
+    "explicability",
+    "explanation",
+    "explanatory clarity",
+    "traceability"
+  ],
+  "fairness": [
+    "equity",
+    "impartiality",
+    "non-discrimination",
+    "unbiasedness",
+    "justice",
+    "equal treatment",
+    "fair treatment"
+  ],
+  "human agency": [
+    "human control",
+    "human autonomy",
+    "user control",
+    "human oversight",
+    "human intervention",
+    "human decision-making"
+  ],
+  "human agency and oversight": [
+    "human control",
+    "human autonomy",
+    "user control",
+    "human oversight",
+    "human intervention",
+    "human decision-making"
+  ],
+  "non-discrimination": [
+    "fairness",
+    "equal treatment",
+    "equity",
+    "impartiality",
+    "anti-discrimination",
+    "unbiasedness"
+  ],
+  "oversight": [
+    "supervision",
+    "monitoring",
+    "governance",
+    "review",
+    "audit",
+    "human oversight"
+  ],
+  "privacy": [
+    "confidentiality",
+    "data protection",
+    "information privacy",
+    "personal data protection",
+    "anonymity",
+    "secrecy"
+  ],
+  "robustness": [
+    "resilience",
+    "stability",
+    "reliability",
+    "fault tolerance",
+    "dependability",
+    "non-fragility"
+  ],
+  "safety": [
+    "harmlessness",
+    "risk prevention",
+    "risk mitigation",
+    "safe operation",
+    "hazard prevention",
+    "security"
+  ],
+  "transparency": [
+    "openness",
+    "clarity",
+    "disclosure",
+    "visibility",
+    "explainability",
+    "interpretability",
+    "traceability"
+  ]
+}

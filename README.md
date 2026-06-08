@@ -163,7 +163,11 @@ All pipeline behavior is **environment-driven** (see [`src/kbdebugger/pipeline/c
 | `KB_MIN_SIMILARITY_THRESHOLD` | `0.55` | Cosine cutoff for vector filter |
 | `KB_NODE_ENTITY_TOP_K` | `5` | Nearest KG nodes retrieved per quality entity/keyphrase |
 | `KB_NODE_ENTITY_MAX_ENTITIES_PER_QUALITY` | `8` | Max candidate entities/keyphrases extracted per quality |
-| `KB_KEYWORD_SYNONYMS_ENABLED` | `true` | Enable cached LLM/curated synonyms for keyword paragraph filtering |
+| `KB_KEYWORD_SYNONYMS_ENABLED` | `true` | Full off switch for keyword synonym expansion |
+| `KB_KEYWORD_SYNONYM_CACHE_ENABLED` | `true` | Read the persistent runtime synonym cache before calling the LLM |
+| `KB_KEYWORD_SYNONYM_CACHE_PATH` | `runtime/keyword_synonyms_cache.json` | Local JSON cache for LLM-generated keyword synonyms |
+| `KB_KEYWORD_SYNONYM_DEFAULTS_PATH` | `data/keyword_synonyms.json` | Versioned curated synonym defaults |
+| `KB_KEYWORD_SYNONYM_CACHE_WRITE` | `true` | Save successful LLM synonym generations to the runtime cache |
 | `KB_DECOMPOSER_PARALLEL` | `true` | Run decomposition batches concurrently |
 | `KB_DECOMPOSER_MAX_WORKERS` | `2` | Conservative worker count for decomposition LLM calls |
 | `KB_NOVELTY_PARALLEL` | `true` | Run novelty batches concurrently |
