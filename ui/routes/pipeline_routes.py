@@ -72,12 +72,13 @@ def get_triplet_predicates():
 @pipeline_bp.post("/run")
 def start_pipeline_run():
     """
-    Start a long-running pipeline job (Stage 2 for now).
+    Start a long-running pipeline job over one or more documents.
 
     Request
     -------
     multipart/form-data:
-        document: File
+        documents: File (repeatable — one part per uploaded document)
+        document: File (legacy single-file field, still accepted)
     query:
         keyword: str
 
@@ -92,21 +93,23 @@ def start_pipeline_run():
     if not keyword:
         return jsonify({"error": "Missing query param: keyword"}), 400
 
-    if "document" not in request.files:
-        return jsonify({"error": "Missing file part: document"}), 400
+    files = [f for f in request.files.getlist("documents") if f and f.filename]
+    if not files:
+        legacy = request.files.get("document")
+        if legacy and legacy.filename:
+            files = [legacy]
 
-    file = request.files["document"]
-    if not file.filename:
-        return jsonify({"error": "Empty filename"}), 400
+    if not files:
+        return jsonify({"error": "Missing file part: documents"}), 400
 
     job = JOB_STORE.create_job()
-    path = _save_upload_to_tmp(file)
+    paths = [_save_upload_to_tmp(f) for f in files]
 
     cfg = get_pipeline_config()
 
     def worker() -> None:
         try:
-            result = run_pipeline(job_id=job.job_id, file_path=path, keyword=keyword, cfg=cfg)
+            result = run_pipeline(job_id=job.job_id, file_paths=paths, keyword=keyword, cfg=cfg)
             JOB_STORE.set_done(job.job_id, result)
         except Exception as e:
             traceback.print_exc()
@@ -231,6 +234,7 @@ def start_triplet_extraction():
                 allowed_predicates=allowed_predicates,
                 parallel=cfg.triplet_extraction_parallel,
                 max_workers=cfg.triplet_extraction_max_workers,
+                schema_grounding_enabled=getattr(cfg, "schema_grounding_enabled", True),
             )
 
             aligned_extracted: list[dict] = []
@@ -246,7 +250,11 @@ def start_triplet_extraction():
 
                 result["original_quality"] = item["quality"]
                 decision = str(item.get("decision") or "").strip().upper()
-                result["upsert_eligible"] = decision != "EXISTING"
+                schema_status = str(result.get("schema_status") or "").strip().upper()
+                # EXISTING rows are eligible too: re-submitting an existing triple
+                # appends this document's provenance to the edge (the cross-document
+                # overlap signal) without changing the knowledge itself.
+                result["upsert_eligible"] = schema_status in {"", "SCHEMA_VALID"}
                 if decision:
                     result["decision"] = decision
 
@@ -280,9 +288,34 @@ def start_triplet_extraction():
 
 
 
+def _clean_provenance(raw) -> dict | None:
+    """Sanitize the per-extraction provenance payload from the review UI."""
+    if not isinstance(raw, dict):
+        return None
+
+    chunk_index = raw.get("chunk_index")
+    if not isinstance(chunk_index, int):
+        chunk_index = None
+
+    modality = str(raw.get("modality", "")).strip().upper()
+    if modality not in {"MANDATORY", "RECOMMENDED", "OPTIONAL", "PROHIBITED"}:
+        modality = ""
+
+    provenance = {
+        "doc_name": str(raw.get("doc_name", "")).strip(),
+        "quality": str(raw.get("quality", "")).strip(),
+        "chunk_index": chunk_index,
+        "chunk_excerpt": str(raw.get("chunk_excerpt", "")).strip()[:500],
+    }
+    if modality:
+        provenance["modality"] = modality
+    return provenance if any(v for v in provenance.values() if v not in ("", None)) else None
+
+
 @pipeline_bp.post("/kg-upsert")
 def start_kg_upsert():
     from kbdebugger.graph.api import upsert_extracted_triplets
+    from kbdebugger.graph.utils import predicate_to_relationship_type
     from kbdebugger.types import ExtractionResult
     """
     Start Stage 7 (KG upsert) as a background job.
@@ -291,11 +324,18 @@ def start_kg_upsert():
     --------------
     {
       "extractions": [
-        {"sentence": "...", "triplets": [["S","O","P"], ...]},
+        {
+          "sentence": "...",
+          "triplets": [["S","O","P"], ...],
+          "provenance": {"doc_name": "...", "quality": "...", "chunk_index": 3, "chunk_excerpt": "..."}
+        },
         ...
       ],
-      "source": "ui/temp_uploads/foo.pdf"   # optional, but recommended
+      "source": "foo.pdf"   # optional global fallback provenance
     }
+
+    Non-standard predicates are accepted (the reviewer explicitly included
+    them); they only need to sanitize into a safe Neo4j relationship type.
 
     Response
     --------
@@ -304,8 +344,7 @@ def start_kg_upsert():
     payload = request.get_json(silent=True) or {}
     raw_extractions = payload.get("extractions")
     source = payload.get("source")
-    allowed_predicate_set = set(DEFAULT_ALLOWED_PREDICATES)
-    invalid_predicates: list[str] = []
+    unsafe_predicates: list[str] = []
 
     if not isinstance(raw_extractions, list) or not raw_extractions:
         return jsonify({"error": "Expected non-empty 'extractions' list"}), 400
@@ -330,16 +369,22 @@ def start_kg_upsert():
             o = str(t[1]).strip()
             p = str(t[2]).strip()
             if s and o and p:
-                if allowed_predicate_set and p not in allowed_predicate_set:
-                    invalid_predicates.append(p)
+                try:
+                    predicate_to_relationship_type(p)
+                except ValueError:
+                    unsafe_predicates.append(p)
                     continue
                 cleaned_triplets.append((s, o, p))
 
-        cleaned.append({"sentence": sentence, "triplets": cleaned_triplets})
+        item: ExtractionResult = {"sentence": sentence, "triplets": cleaned_triplets}
+        provenance = _clean_provenance(ex.get("provenance"))
+        if provenance:
+            item["provenance"] = provenance
+        cleaned.append(item)
 
-    if invalid_predicates:
-        invalid = sorted(set(invalid_predicates))
-        return jsonify({"error": f"Unsupported predicate(s): {invalid}"}), 400
+    if unsafe_predicates:
+        unsafe = sorted(set(unsafe_predicates))
+        return jsonify({"error": f"Predicate(s) cannot be converted to a safe relationship type: {unsafe}"}), 400
 
     if not cleaned:
         return jsonify({"error": "No valid ExtractionResult items provided."}), 400

@@ -16,12 +16,15 @@ from kbdebugger.compat.langchain import (
 # from docling.document_converter import DocumentConverter, PdfFormatOption
 
 from .logging import save_chunked_documents_json
+from .reference_filter import filter_reference_section
 
 
 def extract_paragraphs_with_docling(
         pdf_path: str | Path,
         do_ocr: bool = False,
-        do_table_structure: bool = False
+        do_table_structure: bool = False,
+        drop_reference_section: bool = True,
+        reference_filter_mode: str = "conservative",
     ) -> tuple[List[Document], dict]:
     """
     Extract paragraph-level text chunks from a PDF using Docling via LangChain.
@@ -83,6 +86,22 @@ def extract_paragraphs_with_docling(
     rich.print(f"👁️  [DOCLING] OCR enabled: {do_ocr}")
     rich.print(f"📊  [DOCLING] Table recognition enabled: {do_table_structure}")
 
-    logging_payload = save_chunked_documents_json(docs=docs, source_kind=SourceKind.PDF_PARAGRAPHS)
+    docs, reference_filter_metadata = filter_reference_section(
+        docs,
+        mode=reference_filter_mode,
+        enabled=drop_reference_section,
+    )
+    if reference_filter_metadata.get("reference_section_detected"):
+        rich.print(
+            "📚 [DOCLING] Reference section removed: "
+            f"{reference_filter_metadata['num_reference_docs_removed']} paragraphs from "
+            f"index {reference_filter_metadata['trigger_doc_index']} onward."
+        )
+
+    logging_payload = save_chunked_documents_json(
+        docs=docs,
+        source_kind=SourceKind.PDF_PARAGRAPHS,
+        extra_metadata=reference_filter_metadata,
+    )
 
     return docs, logging_payload

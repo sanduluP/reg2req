@@ -25,14 +25,17 @@ def coerce_triplets(
     allowed_predicates: Optional[Sequence[str]] = None,
 ) -> ExtractionResult:
     """
-    Coerce a single item dict to ExtractionResult and drop predicates outside
-    the allowed ontology when an allowed predicate list is provided.
+    Coerce a single item dict to ExtractionResult.
+
+    Predicates outside the standard predicate list are kept (never silently
+    dropped) and reported via `non_standard_predicates` so the review UI can
+    flag them for extra reviewer attention.
     """
     sentence = item.get("sentence", fallback_sentence)
     raw_triplets = item.get("triplets", [])
     allowed = _predicate_set(allowed_predicates)
     triplets: list[TripletSubjectObjectPredicate] = []
-    rejected_predicates: list[str] = []
+    non_standard_predicates: list[str] = []
 
     if isinstance(raw_triplets, list):
         for t in raw_triplets:
@@ -45,22 +48,24 @@ def coerce_triplets(
                     if not (subj_clean and obj_clean and rel_clean):
                         continue
                     if allowed is not None and rel_clean not in allowed:
-                        rejected_predicates.append(rel_clean)
-                        continue
+                        non_standard_predicates.append(rel_clean)
                     triplets.append((subj_clean, obj_clean, rel_clean))
 
     result: ExtractionResult = {"sentence": str(sentence), "triplets": triplets}
+    if non_standard_predicates:
+        result["non_standard_predicates"] = sorted(set(non_standard_predicates))
+
+    modality = str(item.get("modality") or "").strip().upper()
+    if modality in {"MANDATORY", "RECOMMENDED", "OPTIONAL", "PROHIBITED"}:
+        result["modality"] = modality
+
     skipped_reason_raw = item.get("skipped_reason")
     skipped_reason = str(skipped_reason_raw).strip() if skipped_reason_raw else ""
 
     if skipped_reason:
         result["skipped_reason"] = skipped_reason
     elif allowed is not None and not triplets:
-        if rejected_predicates:
-            rejected = ", ".join(sorted(set(rejected_predicates)))
-            result["skipped_reason"] = f"No extracted predicate matched the allowed relationship types. Rejected: {rejected}."
-        else:
-            result["skipped_reason"] = "No allowed relationship type fit this quality."
+        result["skipped_reason"] = "No allowed relationship type fit this quality."
 
     return result
 

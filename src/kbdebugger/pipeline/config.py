@@ -73,6 +73,14 @@ class PipelineConfig:
             Path to corpus PDF file (when KB_SOURCE_KIND starts with "PDF_")
             Default: "data/SDS/InstructCIR.pdf"
 
+        KB_DROP_REFERENCE_SECTION:
+            Drop a detected research-paper References/Bibliography section after Docling.
+            Default: true
+
+        KB_REFERENCE_SECTION_FILTER_MODE:
+            Reference-section filter mode. Supported: "conservative".
+            Default: "conservative"
+
     3️⃣ Vector similarity filtering:
         KB_ENCODER_MODEL_NAME:
             🤗 HuggingFace model id for the SentenceTransformer encoder used to embed
@@ -184,6 +192,10 @@ class PipelineConfig:
         KB_TRIPLET_EXTRACTION_MAX_WORKERS:
             Maximum triplet extraction LLM worker threads when parallel mode is enabled.
             Default: 2
+
+        KB_SCHEMA_GROUNDING_ENABLED:
+            Use the current Neo4j graph as standard schema grounding during triplet extraction.
+            Default: true
     """
    # ----------------------------
     # KG retrieval
@@ -200,6 +212,8 @@ class PipelineConfig:
     # 🦆 Docling
     docling_enable_OCR: bool
     docling_enable_table_recognition: bool
+    drop_reference_section: bool
+    reference_section_filter_mode: str
 
     # ----------------------------
     # Vector similarity filter
@@ -238,6 +252,7 @@ class PipelineConfig:
     triplet_extraction_batch_size: int
     triplet_extraction_parallel: bool
     triplet_extraction_max_workers: int
+    schema_grounding_enabled: bool
 
 
 
@@ -287,6 +302,15 @@ class PipelineConfig:
 
         docling_enable_OCR = _env_bool("DOCLING_ENABLE_OCR", False)
         docling_enable_table_recognition = _env_bool("DOCLING_ENABLE_TABLE_RECOGNITION", False)
+        drop_reference_section = _env_bool("KB_DROP_REFERENCE_SECTION", True)
+        reference_section_filter_mode = os.getenv(
+            "KB_REFERENCE_SECTION_FILTER_MODE",
+            "conservative",
+        ).strip().lower()
+        if reference_section_filter_mode not in {"conservative"}:
+            raise ValueError(
+                f"Invalid KB_REFERENCE_SECTION_FILTER_MODE={reference_section_filter_mode!r}"
+            )
 
         # ---------- KeyBERT keyword filter ----------
         keybert_model_name = os.getenv(
@@ -414,6 +438,7 @@ class PipelineConfig:
         triplet_extraction_parallel = _env_bool("KB_TRIPLET_EXTRACTION_PARALLEL", True)
         triplet_extraction_max_workers = int(os.getenv("KB_TRIPLET_EXTRACTION_MAX_WORKERS", "2").strip())
         triplet_extraction_max_workers = max(1, triplet_extraction_max_workers)
+        schema_grounding_enabled = _env_bool("KB_SCHEMA_GROUNDING_ENABLED", True)
 
 
         return cls(
@@ -443,7 +468,10 @@ class PipelineConfig:
             triplet_extraction_batch_size=triplet_extraction_batch_size,
             triplet_extraction_parallel=triplet_extraction_parallel,
             triplet_extraction_max_workers=triplet_extraction_max_workers,
+            schema_grounding_enabled=schema_grounding_enabled,
 
             docling_enable_OCR=docling_enable_OCR,
-            docling_enable_table_recognition=docling_enable_table_recognition
+            docling_enable_table_recognition=docling_enable_table_recognition,
+            drop_reference_section=drop_reference_section,
+            reference_section_filter_mode=reference_section_filter_mode,
         )

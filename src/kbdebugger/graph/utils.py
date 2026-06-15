@@ -26,22 +26,26 @@ def normalize_text(text: str) -> str:
 
 
 def normalize_graph_name(text: str) -> str:
-    """Preserve Dorian-style node names while trimming whitespace noise."""
+    """Preserve graph node names while trimming whitespace noise."""
     return " ".join(str(text).strip().split())
 
 
-def predicate_to_dorian_relationship_type(predicate: str) -> str:
+def predicate_to_relationship_type(predicate: str) -> str:
     """
-    Convert an allowed KBExtraction predicate to Dorian's Neo4j rel type.
+    Convert a predicate to a safe Neo4j relationship type.
 
-    The relationship type is safe to inject into Cypher only after this whitelist
-    check succeeds.
+    Standard predicates map through the precomputed whitelist. Non-standard
+    predicates (kept for reviewer attention and explicitly included on submit)
+    are sanitized into snake_case; the result is only safe to inject into
+    Cypher after the `_SAFE_REL_TYPE_RE` check passes.
     """
     raw = str(predicate).strip()
     rel_type = _ALLOWED_PREDICATE_TYPES.get(raw)
     if rel_type is None:
-        raise ValueError(f"Unsupported predicate for Dorian Neo4j schema: {predicate!r}")
-    if not _SAFE_REL_TYPE_RE.fullmatch(rel_type):
+        snake = _CAMEL_BOUNDARY_RE.sub("_", raw).lower()
+        snake = re.sub(r"[^a-z0-9]+", "_", snake).strip("_")
+        rel_type = snake
+    if not rel_type or not _SAFE_REL_TYPE_RE.fullmatch(rel_type):
         raise ValueError(f"Unsafe Neo4j relationship type generated for predicate {predicate!r}: {rel_type!r}")
     return rel_type
 
@@ -90,12 +94,16 @@ def map_extracted_triplets_to_graph_relations(
 ) -> List[GraphRelation]:
     """
     Map an ExtractionResult to graph-ready relation dicts.
-    - extraction: {"sentence": str, "triplets": [(subj,obj,rel), ...]}
-    - source_doc: LangChain Document (for provenance: page_content + metadata)
+    - extraction: {"sentence": str, "triplets": [(subj,obj,rel), ...],
+                   "provenance": {doc_name, quality, chunk_index, chunk_excerpt}?}
+    - source: optional fallback provenance string (e.g. uploaded file name)
     """
     # defensive: accept partially-typed dicts
     sentence_text = extraction.get("sentence")
     triplets = extraction.get("triplets", [])
+    provenance = extraction.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = None
 
     rels: List[GraphRelation] = []
     for subj, obj, rel in triplets:
@@ -103,9 +111,8 @@ def map_extracted_triplets_to_graph_relations(
         props: EdgeProperties = {
             # for provenance
             'sentence': sentence_text,
-            **({'source': source} if source else {})  # only include if source is provided
-            # 'original_sentence': getattr(source_doc, "page_content", ""),
-            # **getattr(source_doc, "metadata", {})  # type: ignore[arg-type]
+            **({'source': source} if source else {}),  # only include if source is provided
+            **({'provenance': provenance} if provenance else {}),  # structured per-doc provenance
         }
 
         rels.append({

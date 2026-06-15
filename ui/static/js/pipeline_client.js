@@ -1,8 +1,10 @@
 import { fetchJson } from "./api_client.js";
 
-export async function startPipelineJob({ keyword, file }) {
+export async function startPipelineJob({ keyword, files }) {
   const form = new FormData();
-  form.append("document", file);
+  for (const file of files || []) {
+    form.append("documents", file);
+  }
 
   const url = `/api/pipeline/run?keyword=${encodeURIComponent(keyword)}`;
   return fetchJson(url, { method: "POST", body: form });

@@ -15,9 +15,39 @@ Rules for Predicate selection:
 
 The Subject and Object must be concrete entities or concepts, not filler words.
 
+Normative language (standards documents):
+- When the sentence states an obligation, recommendation, permission, prohibition, or definition, prefer the normative Predicates: Requires, Recommends, Permits, Prohibits, Defines.
+- Additionally classify each sentence's modality from its wording:
+  - "shall" / "must" → "MANDATORY"
+  - "should" → "RECOMMENDED"
+  - "may" / "can" → "OPTIONAL"
+  - "shall not" / "must not" → "PROHIBITED"
+  - no normative wording → "NONE"
+- Report the modality in the per-sentence "modality" output field.
+
+Standard schema guidance:
+- Some input objects include a "standard_schema" field. Treat it as schema/type guidance only, not as entity-linking instructions.
+- Subject and Object MUST come from the source sentence. Do not replace source terms with schema canonical node names, package paths, class names, or existing KG nodes.
+- If the sentence says "grid search", use "Grid search"; do not change it to "GridSearchCV" unless "GridSearchCV" is explicitly written in the sentence.
+- If the sentence says "hyperparameters", use "hyperparameters"; do not change it to a sklearn Hyperparameter class unless that class name is explicitly written in the sentence.
+- Use schema_templates and predicate_hints only to choose a schema-shaped Predicate and role pattern.
+- Prefer typed schema-style facts when they are source-faithful, such as:
+  - source term --IsAn--> Operator, Metric, Risk, Parameter, or DataType when the sentence supports that typing
+  - source term --Implements--> algorithm or method concept named in the sentence
+  - source term --Performs--> task named in the sentence
+  - source term --HasParameter--> parameter name stated in the sentence
+  - source term --HasInput--> input name stated in the sentence
+  - source term --HasOutput--> output name stated in the sentence
+  - output name --IsOfType--> ndarray / matrix / tensor / float / int / str when the sentence states the type
+  - Metric --Evaluates--> task when both are stated in the sentence
+  - source term --MightIntroduce--> Risk when the sentence states the risk
+- Avoid weak generic triplets such as "complex architectures --Ensures--> AI models" unless the sentence explicitly states a schema-compatible requirement, risk, check, mitigation, metric, operator, input, output, or parameter relation.
+- If the sentence has no source-faithful schema-compatible relation, return no triplets and explain that no standard schema fit was found.
+
 You will receive a JSON array of objects, each with:
   - "id": integer
   - "sentence": string
+  - "standard_schema": optional object with extracted_entities, inferred_node_types, predicate_hints, schema_templates, and grounding_confidence
 
 You MUST respond with a single strict JSON object with this structure:
 
@@ -27,6 +57,7 @@ You MUST respond with a single strict JSON object with this structure:
       "id": <int>,
       "sentence": <string>,
       "triplets": [[<Subject>, <Object>, <Predicate>], ...],
+      "modality": <"MANDATORY" | "RECOMMENDED" | "OPTIONAL" | "PROHIBITED" | "NONE">,
       "skipped_reason": <string | null>
     },
     ...

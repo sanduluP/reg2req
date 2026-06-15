@@ -4,7 +4,20 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
+# Normative predicates capture the deontic language of standards documents
+# (ISO "shall" / "should" / "may" / "shall not", definitions). They make
+# cross-standard comparison possible: obligation-strength conflicts are
+# detected by comparing modality on aligned triples.
+NORMATIVE_PREDICATES: tuple[str, ...] = (
+    "Requires",
+    "Recommends",
+    "Permits",
+    "Prohibits",
+    "Defines",
+)
+
 DEFAULT_ALLOWED_PREDICATES: tuple[str, ...] = (
+    *NORMATIVE_PREDICATES,
     "IsSubclassOf",
     "Implements",
     "IsEquivalentTo",

@@ -52,9 +52,9 @@
 
                 <div class="pipeline-document input-group input-group-sm">
                     <label class="input-group-text text-muted" for="documents">
-                        <i class="bi bi-file-earmark-pdf me-1"></i> Document
+                        <i class="bi bi-file-earmark-pdf me-1"></i> Documents
                     </label>
-                    <input class="form-control" type="file" id="documents" name="documents" disabled>
+                    <input class="form-control" type="file" id="documents" name="documents" multiple disabled>
                 </div>
 
                 <div class="pipeline-actions btn-group btn-group-sm">
@@ -141,6 +141,13 @@
                             data-bs-target="#oversight-view" type="button" role="tab" aria-controls="oversight-view"
                             aria-selected="false">
                             Oversight
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="compare-view-tab" data-bs-toggle="tab"
+                            data-bs-target="#compare-view" type="button" role="tab" aria-controls="compare-view"
+                            aria-selected="false">
+                            Compare
                         </button>
                     </li>
                 </ul>
@@ -322,12 +329,22 @@
                                             Deleted: <span id="triplets-deleted-count" class="fw-semibold">0</span>
                                         </div>
 
-                                        <div class="input-group input-group-sm" style="max-width: 340px;">
-                                            <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                            <input id="triplets-filter" class="form-control" type="text"
-                                                placeholder="Filter triplets..." />
-                                            <button id="triplets-clear-filter" class="btn btn-outline-secondary"
-                                                type="button">Clear</button>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <div class="input-group input-group-sm" style="max-width: 240px;">
+                                                <span class="input-group-text"><i class="bi bi-tags"></i></span>
+                                                <select id="triplets-tag-filter" class="form-select form-select-sm"
+                                                    title="Filter rows by tag">
+                                                    <option value="">All tags</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="input-group input-group-sm" style="max-width: 340px;">
+                                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                                <input id="triplets-filter" class="form-control" type="text"
+                                                    placeholder="Filter triplets..." />
+                                                <button id="triplets-clear-filter" class="btn btn-outline-secondary"
+                                                    type="button">Clear</button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -339,6 +356,111 @@
                                         No triplets to review.
                                     </div>
                                 </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Compare view: cross-document overlap / alignment / conflicts / ambiguity -->
+                    <div class="tab-pane fade h-100" id="compare-view" role="tabpanel"
+                        aria-labelledby="compare-view-tab" style="min-height:0; overflow:auto;">
+                        <section class="p-2 p-md-2 bg-white rounded-3 border">
+
+                            <ul class="nav nav-pills nav-sm mb-2 gap-1" id="compare-inner-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button id="compare-overlap-tab" class="nav-link active btn-sm" data-bs-toggle="tab"
+                                        data-bs-target="#compare-overlap" type="button" role="tab">
+                                        Overlap &amp; Coverage
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button id="compare-alignment-tab" class="nav-link btn-sm" data-bs-toggle="tab"
+                                        data-bs-target="#compare-alignment" type="button" role="tab">
+                                        Alignment
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button id="compare-conflicts-tab" class="nav-link btn-sm" data-bs-toggle="tab"
+                                        data-bs-target="#compare-conflicts" type="button" role="tab">
+                                        Conflicts
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button id="compare-ambiguity-tab" class="nav-link btn-sm" data-bs-toggle="tab"
+                                        data-bs-target="#compare-ambiguity" type="button" role="tab">
+                                        Ambiguity
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content" id="compare-inner-tabs-content">
+
+                                <!-- Overlap & Coverage -->
+                                <div class="tab-pane fade show active" id="compare-overlap" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <button id="compare-overlap-refresh" class="btn btn-primary btn-sm" type="button">
+                                            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                                        </button>
+                                        <button id="compare-overlap-export" class="btn btn-outline-primary btn-sm" type="button">
+                                            <i class="bi bi-download me-1"></i> Export
+                                        </button>
+                                        <span id="compare-overlap-status" class="text-muted small"></span>
+                                    </div>
+                                    <div id="compare-coverage-wrap" class="mb-3"></div>
+                                    <div id="compare-overlap-wrap" class="mb-3"></div>
+                                    <div id="compare-concepts-wrap"></div>
+                                </div>
+
+                                <!-- Alignment -->
+                                <div class="tab-pane fade" id="compare-alignment" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <button id="compare-alignment-scan" class="btn btn-primary btn-sm" type="button">
+                                            <i class="bi bi-link-45deg me-1"></i> Scan for matching concepts
+                                        </button>
+                                        <span id="compare-alignment-status" class="text-muted small"></span>
+                                    </div>
+                                    <div class="text-muted small mb-2">
+                                        Accepting a pair marks the two terms as the same concept across documents;
+                                        rejected pairs never resurface and high-similarity rejections feed the ambiguity report.
+                                    </div>
+                                    <div id="compare-alignment-wrap"></div>
+                                </div>
+
+                                <!-- Conflicts -->
+                                <div class="tab-pane fade" id="compare-conflicts" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <button id="compare-conflicts-scan" class="btn btn-primary btn-sm" type="button">
+                                            <i class="bi bi-exclamation-diamond me-1"></i> Scan for conflicts
+                                        </button>
+                                        <div class="form-check form-check-inline small mb-0">
+                                            <input id="compare-conflicts-judge" class="form-check-input" type="checkbox" checked>
+                                            <label class="form-check-label" for="compare-conflicts-judge">LLM verdicts</label>
+                                        </div>
+                                        <button id="compare-conflicts-export" class="btn btn-outline-primary btn-sm" type="button">
+                                            <i class="bi bi-download me-1"></i> Export
+                                        </button>
+                                        <span id="compare-conflicts-status" class="text-muted small"></span>
+                                    </div>
+                                    <div id="compare-conflicts-wrap"></div>
+                                    <div class="mt-3">
+                                        <div class="fw-semibold small text-muted mb-1">Previously reviewed</div>
+                                        <div id="compare-conflicts-recorded-wrap"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Ambiguity -->
+                                <div class="tab-pane fade" id="compare-ambiguity" role="tabpanel">
+                                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                                        <button id="compare-ambiguity-refresh" class="btn btn-primary btn-sm" type="button">
+                                            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                                        </button>
+                                        <button id="compare-ambiguity-export" class="btn btn-outline-primary btn-sm" type="button">
+                                            <i class="bi bi-download me-1"></i> Export
+                                        </button>
+                                        <span id="compare-ambiguity-status" class="text-muted small"></span>
+                                    </div>
+                                    <div id="compare-ambiguity-wrap"></div>
+                                </div>
+
                             </div>
                         </section>
                     </div>

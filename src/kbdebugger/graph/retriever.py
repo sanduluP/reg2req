@@ -85,15 +85,16 @@ class KnowledgeGraphRetriever:
         )
         results.extend({"relation": rel, "match_pattern": "target_name"} for rel in rels)
 
-        # --- Pattern 3: keyword in Dorian relationship type or provenance fields ---
+        # --- Pattern 3: keyword in relationship type or provenance fields ---
         rels = graph.query_relations(
             """
             MATCH (n:Node)-[r]->(m:Node)
             WHERE
                 toLower(type(r))                            CONTAINS $keyword OR
                 toLower(replace(type(r), "_", " "))        CONTAINS $keyword OR
-                toLower(coalesce(r.sentence, ""))          CONTAINS $keyword OR
-                toLower(coalesce(r.source, ""))            CONTAINS $keyword
+                toLower(coalesce(toString(properties(r)["sentence"]), "")) CONTAINS $keyword OR
+                toLower(coalesce(toString(properties(r)["source"]), ""))   CONTAINS $keyword OR
+                toLower(coalesce(toString(properties(r)["target"]), ""))   CONTAINS $keyword
             RETURN
                 n.name AS source,
                 m.name AS target,

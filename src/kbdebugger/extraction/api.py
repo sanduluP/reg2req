@@ -1,5 +1,4 @@
 from __future__ import annotations
-from encodings.punycode import T
 from typing import List, Optional
 
 from kbdebugger.compat.langchain import Document
@@ -17,6 +16,8 @@ def extract_paragraphs_from_pdf(
     pdf_path: str,
     do_ocr: bool = True,
     do_table_structure: bool = True,
+    drop_reference_section: bool = True,
+    reference_filter_mode: str = "conservative",
 ) -> tuple[List[Document], dict]:
     """
     Public API: Extract clean paragraphs from a PDF via 🦆 Docling.
@@ -40,6 +41,8 @@ def extract_paragraphs_from_pdf(
         pdf_path=pdf_path,
         do_ocr=do_ocr,
         do_table_structure=do_table_structure,
+        drop_reference_section=drop_reference_section,
+        reference_filter_mode=reference_filter_mode,
     )
 
     # paragraphs = [

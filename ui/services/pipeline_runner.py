@@ -7,15 +7,17 @@ Pipeline runner for the UI.
 This module runs long stages in a background thread and reports progress
 into the job store.
 
-We start with Stage 2 (Docling + KeyBERT + Decomposer),
-and we design the function so you can extend it to Stage 3/4
-without changing the job API contract.
+The runner accepts one or more uploaded documents per job. Each document is
+parsed and decomposed individually (so every quality keeps its document
+provenance), then similarity filtering and novelty classification run once
+over the combined pool of qualities.
 """
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Sequence
 
+from kbdebugger.compat.langchain import Document
 from kbdebugger.pipeline.config import PipelineConfig
 from kbdebugger.extraction.api import extract_paragraphs_from_pdf
 
@@ -35,6 +37,9 @@ from ui.services.progress_callbacks import init_stage, make_job_progress_callbac
 def _source_context_lookup(decomposer_log: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Build quality text -> source paragraph context lookup for UI popovers.
+
+    The context carries document provenance (doc_name, doc_id) alongside the
+    source chunk so downstream stages can attach it to triplets and KG writes.
     """
     lookup: Dict[str, Dict[str, Any]] = {}
     entries = decomposer_log.get("quality_sources")
@@ -56,6 +61,12 @@ def _source_context_lookup(decomposer_log: Dict[str, Any]) -> Dict[str, Dict[str
         metadata = entry.get("metadata")
         if isinstance(metadata, dict) and metadata:
             context["metadata"] = metadata
+            doc_name = str(metadata.get("source") or "").strip()
+            if doc_name:
+                context["doc_name"] = doc_name
+            doc_id = str(metadata.get("doc_id") or "").strip()
+            if doc_id:
+                context["doc_id"] = doc_id
 
         lookup[quality] = context
 
@@ -75,19 +86,20 @@ def _attach_source_context(items: list[Dict[str, Any]], lookup: Dict[str, Dict[s
 def run_pipeline(
     *,
     job_id: str,
-    file_path: Path,
+    file_paths: Sequence[Path],
     keyword: str,
     cfg: PipelineConfig,
 ) -> Dict[str, Any]:
     """
-    Run Stage 2 end-to-end and return JSON-serializable output.
+    Run Stage 2 end-to-end over one or more documents and return
+    JSON-serializable output.
 
     Parameters
     ----------
     job_id:
         Job identifier whose progress should be updated.
-    file_path:
-        Path to the uploaded document.
+    file_paths:
+        Paths to the uploaded documents (one or more).
     keyword:
         User-selected Trustworthy AI pillar keyword.
     cfg:
@@ -100,37 +112,66 @@ def run_pipeline(
     """
     JOB_STORE.set_running(job_id)
 
-    # ---------------------------
-    # Stage 2a: Docling
-    # ---------------------------
-    init_stage(
-        job_id=job_id,
-        stage="Docling",
-        message="🦆 Parsing document into paragraphs (Docling)...",
-        current=None,
-        total=None,
-    )
+    paths = [Path(p) for p in file_paths]
+    if not paths:
+        raise ValueError("run_pipeline requires at least one document path.")
 
-    paragraphs, docling_log = extract_paragraphs_from_pdf(
-        pdf_path=str(file_path),
-        do_ocr=cfg.docling_enable_OCR,
-        do_table_structure=cfg.docling_enable_table_recognition,
-    )
+    num_docs = len(paths)
 
     # ---------------------------
-    # Stage 2b: KeyBERT filter
+    # Stage 2a: Docling (per document, so provenance stays per-doc)
     # ---------------------------
-    total_par = len(paragraphs)
+    all_paragraphs: List[Document] = []
+    docling_logs: list[Dict[str, Any]] = []
+
+    for doc_idx, path in enumerate(paths, start=1):
+        init_stage(
+            job_id=job_id,
+            stage="Docling",
+            message=f"🦆 Parsing document {doc_idx}/{num_docs} into paragraphs (Docling): {path.name}",
+            current=doc_idx - 1,
+            total=num_docs,
+        )
+
+        paragraphs, docling_log = extract_paragraphs_from_pdf(
+            pdf_path=str(path),
+            do_ocr=cfg.docling_enable_OCR,
+            do_table_structure=cfg.docling_enable_table_recognition,
+            drop_reference_section=cfg.drop_reference_section,
+            reference_filter_mode=cfg.reference_section_filter_mode,
+        )
+
+        # Tag every paragraph with its document identity so qualities,
+        # triplets, and KG provenance can always be traced back to the file.
+        doc_id = f"doc-{doc_idx}"
+        for paragraph in paragraphs:
+            metadata = getattr(paragraph, "metadata", None)
+            if isinstance(metadata, dict):
+                metadata["source"] = path.name
+                metadata["doc_id"] = doc_id
+
+        all_paragraphs.extend(paragraphs)
+        docling_logs.append({"doc_name": path.name, "doc_id": doc_id, **(docling_log or {})})
+
+    docling_log_combined: Dict[str, Any] = {
+        "num_documents": num_docs,
+        "documents": docling_logs,
+    }
+
+    # ---------------------------
+    # Stage 2b: KeyBERT filter (combined paragraph pool)
+    # ---------------------------
+    total_par = len(all_paragraphs)
     init_stage(
         job_id=job_id,
         stage="KeyBERT",
-        message=f"🔎 Scanning {total_par} paragraphs for keyword '{keyword}'...",
+        message=f"🔎 Scanning {total_par} paragraphs from {num_docs} document(s) for keyword '{keyword}'...",
         current=0,
         total=total_par,
     )
 
     keybert_result, keybert_log = filter_paragraphs_by_keyword(
-        paragraphs=paragraphs,
+        paragraphs=all_paragraphs,
         search_keyword=keyword,
         config=cfg.keybert,
         synonyms_enabled=cfg.keyword_synonyms_enabled,
@@ -140,7 +181,7 @@ def run_pipeline(
         synonym_cache_write=cfg.keyword_synonym_cache_write,
         progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
     )
-        
+
     matched_docs = keybert_result.matched_docs
 
     # ---------------------------
@@ -230,7 +271,7 @@ def run_pipeline(
 
 
     response: Dict[JobProgressStage | str, Dict] = {
-        "Docling": docling_log,
+        "Docling": docling_log_combined,
         "KeyBERT": keybert_log,
         "DecomposerLLM": decomposer_log,
         "SubgraphSimilarity": subgraph_similarity_log,
@@ -238,9 +279,13 @@ def run_pipeline(
     }
 
     # ✅ Add pipeline metadata so UI can keep provenance across stages
+    source_names = [p.name for p in paths]
     response["_meta"] = {
-        "source": str(file_path),            # e.g., "ui/temp_uploads/foo.pdf"
-        "source_name": file_path.name,       # e.g., "foo.pdf" (nice for UI)
+        "source": ", ".join(str(p) for p in paths),   # joined paths (legacy display)
+        "source_name": ", ".join(source_names),       # joined names (legacy display)
+        "sources": [str(p) for p in paths],
+        "source_names": source_names,
+        "num_documents": num_docs,
         "keyword": keyword,
     }
 

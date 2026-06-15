@@ -10,6 +10,8 @@
  * - One-liners from controllers ✅
  */
 
+import { formatPredicateLabel } from "./predicate_format.js";
+
 /**
  * @typedef {Object} SubgraphSentenceRecord
  * @property {string} sentence
@@ -355,6 +357,36 @@ export function exportGroupedSentencesAsXlsx({ grouped, keyword, filename }) {
 
 
 /**
+ * Generic: export an array of plain row objects as a single-sheet xlsx.
+ * Column order follows the keys of the first row.
+ *
+ * @param {Object} opts
+ * @param {Object[]} opts.rows
+ * @param {string} opts.sheetName
+ * @param {string} opts.filename
+ * @returns {{ ok: true, count: number } | { ok: false, reason: string }}
+ */
+export function exportRowsAsXlsx({ rows, sheetName, filename }) {
+    const XLSX_LIB = globalThis.XLSX;
+    if (!XLSX_LIB) {
+        return { ok: false, reason: "XLSX export is not available because SheetJS is not loaded." };
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return { ok: false, reason: "No rows to export." };
+    }
+
+    const wb = XLSX_LIB.utils.book_new();
+    const ws = XLSX_LIB.utils.json_to_sheet(rows);
+    if (ws["!ref"]) ws["!autofilter"] = { ref: ws["!ref"] };
+
+    XLSX_LIB.utils.book_append_sheet(wb, ws, worksheetName(sheetName || "Export"));
+    XLSX_LIB.writeFile(wb, filename || "kbdebugger_export.xlsx");
+
+    return { ok: true, count: rows.length };
+}
+
+
+/**
  * Export extracted triplets for human review into one Excel workbook.
  *
  * @param {Object} opts
@@ -376,6 +408,7 @@ export function exportTripletReviewAsXlsx({ rows, documentName, keyword, filenam
     }
 
     const headers = [
+        "Document",
         "Source Chunk",
         "Original Quality",
         "Nearest KG Match",
@@ -396,6 +429,7 @@ export function exportTripletReviewAsXlsx({ rows, documentName, keyword, filenam
     addReviewHeaderComments(ws);
     applyReviewSheetStyles(XLSX_LIB, ws);
     ws["!cols"] = [
+        { wch: 28 },
         { wch: 72 },
         { wch: 54 },
         { wch: 54 },
@@ -449,6 +483,7 @@ function buildTripletReviewRows(rows) {
             return a.index - b.index;
         })
         .map(({ row }) => ({
+            "Document": String(row?.docName || row?.sourceContext?.doc_name || row?.sourceContext?.metadata?.source || "").trim(),
             "Source Chunk": sourceChunkText(row),
             "Original Quality": String(row?.originalQuality || row?.sentence || "").trim(),
             "Nearest KG Match": String(row?.matchedNeighborSentence || "").trim(),
@@ -463,9 +498,9 @@ function buildTripletReviewRows(rows) {
 
 function addReviewHeaderComments(ws) {
     const comments = {
-        F1: "3 = Fully supported by source chunk; 2 = Partially supported / minor nuance missing; 1 = Unsupported / hallucinated.",
-        G1: "3 = Directly relevant to selected Trustworthy AI topic; 2 = Partially / indirectly relevant; 1 = Irrelevant.",
-        H1: "3 = Context preserved; 2 = Some context missing; 1 = Important context lost / misleading.",
+        G1: "3 = Fully supported by source chunk; 2 = Partially supported / minor nuance missing; 1 = Unsupported / hallucinated.",
+        H1: "3 = Directly relevant to selected Trustworthy AI topic; 2 = Partially / indirectly relevant; 1 = Irrelevant.",
+        I1: "3 = Context preserved; 2 = Some context missing; 1 = Important context lost / misleading.",
     };
 
     for (const [cellRef, text] of Object.entries(comments)) {
@@ -479,7 +514,7 @@ function applyReviewSheetStyles(XLSX_LIB, ws) {
     if (!ws["!ref"] || !XLSX_LIB?.utils?.decode_range || !XLSX_LIB?.utils?.encode_cell) return;
 
     const range = XLSX_LIB.utils.decode_range(ws["!ref"]);
-    const wrappedColumns = new Set([0, 1, 2, 4]);
+    const wrappedColumns = new Set([1, 2, 3, 5]);
 
     for (let row = range.s.r; row <= range.e.r; row += 1) {
         for (let col = range.s.c; col <= range.e.c; col += 1) {
@@ -529,7 +564,7 @@ function sourceChunkText(row) {
 
 function tripletText(row) {
     const subject = String(row?.subject || "").trim();
-    const predicate = String(row?.predicate || "").trim();
+    const predicate = formatPredicateLabel(row?.predicate || "");
     const object = String(row?.object || "").trim();
     return `${subject} --${predicate}--> ${object}`;
 }

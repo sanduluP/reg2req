@@ -31,6 +31,9 @@ def test_pipeline_config_post_docling_defaults(monkeypatch: pytest.MonkeyPatch) 
         "KB_NOVELTY_MAX_WORKERS",
         "KB_TRIPLET_EXTRACTION_PARALLEL",
         "KB_TRIPLET_EXTRACTION_MAX_WORKERS",
+        "KB_SCHEMA_GROUNDING_ENABLED",
+        "KB_DROP_REFERENCE_SECTION",
+        "KB_REFERENCE_SECTION_FILTER_MODE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -52,6 +55,9 @@ def test_pipeline_config_post_docling_defaults(monkeypatch: pytest.MonkeyPatch) 
     assert cfg.novelty_max_workers == 2
     assert cfg.triplet_extraction_parallel is True
     assert cfg.triplet_extraction_max_workers == 2
+    assert cfg.schema_grounding_enabled is True
+    assert cfg.drop_reference_section is True
+    assert cfg.reference_section_filter_mode == "conservative"
 
 
 def test_synonyms_disabled_skips_llm_call(monkeypatch: pytest.MonkeyPatch) -> None:

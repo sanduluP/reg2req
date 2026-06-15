@@ -18,31 +18,38 @@ from kbdebugger.extraction.utils import (
 import json
 from kbdebugger.subgraph_similarity.types import KeptQuality
 from kbdebugger.extraction.predicate_options import sanitize_allowed_predicates
+from kbdebugger.standard_schema import (
+    SchemaGroundingContext,
+    build_schema_grounding_contexts,
+    load_standard_schema_profile,
+    validate_extraction_with_standard_schema,
+)
 import torch # type: ignore
 import rich
 from rich.progress import track
 
-def build_triplet_extraction_prompt_batch(sentences: list[str], allowed_predicates: Sequence[str] | None = None) -> str:
+def build_triplet_extraction_prompt_batch(
+    sentences: list[str],
+    allowed_predicates: Sequence[str] | None = None,
+    schema_contexts: Sequence[SchemaGroundingContext] | None = None,
+) -> str:
     """
-    Build a prompt that asks the LLM to extract triplets for multiple sentences
-    in one call, returning a single JSON object:
-
-    {
-      "triplets_batch": [
-        {"id": 0, "sentence": "...", "triplets": [...]},
-        ...
-      ]
-    }
+    Build a prompt that asks the LLM to extract schema-shaped triplets for
+    multiple sentences in one call, returning a single JSON object.
     """
-    # Load few-shot examples once from JSON
     examples = load_json_resource("triplets_batch")
     examples_json = json.dumps(examples, ensure_ascii=False)
-    
-    payload = [
-        {"id": i, "sentence": s.strip()}
-        for i, s in enumerate(sentences)
-        if s.strip()
-    ]
+
+    payload = []
+    for i, sentence in enumerate(sentences):
+        clean = sentence.strip()
+        if not clean:
+            continue
+        item = {"id": i, "sentence": clean}
+        if schema_contexts is not None and i < len(schema_contexts):
+            item["standard_schema"] = schema_contexts[i].to_prompt_dict()
+        payload.append(item)
+
     payload_json = json.dumps(payload, ensure_ascii=False)
     predicates = sanitize_allowed_predicates(allowed_predicates)
     predicates_json = json.dumps(predicates, ensure_ascii=False)
@@ -55,11 +62,15 @@ def build_triplet_extraction_prompt_batch(sentences: list[str], allowed_predicat
     )
 
 
-def _extract_batch_via_llm(sentences: list[str], allowed_predicates: Sequence[str]) -> list[ExtractionResult]:
+def _extract_batch_via_llm(
+    sentences: list[str],
+    allowed_predicates: Sequence[str],
+    schema_contexts: Sequence[SchemaGroundingContext] | None = None,
+) -> list[ExtractionResult]:
     if not sentences:
         return []
 
-    prompt = build_triplet_extraction_prompt_batch(sentences, allowed_predicates)
+    prompt = build_triplet_extraction_prompt_batch(sentences, allowed_predicates, schema_contexts)
     response = respond(
         prompt,
         max_tokens=4096,
@@ -74,7 +85,11 @@ def _extract_batch_via_llm(sentences: list[str], allowed_predicates: Sequence[st
 
 
 @torch.no_grad()
-def _extract_batch_via_hf(sentences: list[str], allowed_predicates: Sequence[str]) -> list[ExtractionResult]:
+def _extract_batch_via_hf(
+    sentences: list[str],
+    allowed_predicates: Sequence[str],
+    schema_contexts: Sequence[SchemaGroundingContext] | None = None,
+) -> list[ExtractionResult]:
     if not sentences:
         return []
 
@@ -84,7 +99,7 @@ def _extract_batch_via_hf(sentences: list[str], allowed_predicates: Sequence[str
         rich.print(f"[extract_triplets_batch] ❌ Could not load HF model: {e}")
         return [{"sentence": s, "triplets": []} for s in sentences]
 
-    prompt = build_triplet_extraction_prompt_batch(sentences, allowed_predicates)
+    prompt = build_triplet_extraction_prompt_batch(sentences, allowed_predicates, schema_contexts)
     inputs = tokenizer(prompt, return_tensors="pt", padding=True)
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
@@ -109,6 +124,7 @@ def extract_triplets_batch(
     allowed_predicates: Sequence[str] | None = None,
     parallel: bool = False,
     max_workers: int = 2,
+    schema_grounding_enabled: bool = True,
 ) -> List[ExtractionResult]:
     sent_list = [s.strip() for s in sentences if s and s.strip()]
     if not sent_list:
@@ -127,9 +143,18 @@ def extract_triplets_batch(
 
     all_results: List[ExtractionResult] = []
 
+    schema_contexts: list[SchemaGroundingContext] | None = None
+    if schema_grounding_enabled:
+        schema_contexts = build_schema_grounding_contexts(sent_list)
+        profile = load_standard_schema_profile()
+    else:
+        profile = None
+
     num_batches = math.ceil(len(sent_list) / batch_size) # No iterator materialization
     max_workers = max(1, int(max_workers or 1))
-    batches = list(enumerate(batched(sent_list, batch_size), start=1))
+    sentence_batches = list(batched(sent_list, batch_size))
+    context_batches = list(batched(schema_contexts, batch_size)) if schema_contexts is not None else [None] * len(sentence_batches)
+    batches = list(enumerate(zip(sentence_batches, context_batches), start=1))
 
     if parallel and num_batches > 1:
         results_by_batch: dict[int, list[ExtractionResult]] = {}
@@ -143,8 +168,10 @@ def extract_triplets_batch(
                     predicates=predicates,
                     num_batches=num_batches,
                     worker_count=max_workers,
+                    schema_contexts=batch_contexts,
+                    schema_profile=profile,
                 ): batch_idx
-                for batch_idx, batch in batches
+                for batch_idx, (batch, batch_contexts) in batches
             }
 
             for future in as_completed(futures):
@@ -157,7 +184,7 @@ def extract_triplets_batch(
         save_results_json(all_results)
         return all_results
 
-    for batch_idx, batch in track(
+    for batch_idx, (batch, batch_contexts) in track(
         batches,
         description=(
             f"🧬 Triplet extraction: sentences → S-P-O. "
@@ -176,6 +203,8 @@ def extract_triplets_batch(
             predicates=predicates,
             num_batches=num_batches,
             worker_count=1,
+            schema_contexts=batch_contexts,
+            schema_profile=profile,
         )
         all_results.extend(batch_results)
 
@@ -263,9 +292,11 @@ def _safe_extract_batch_via_llm(
     predicates: Sequence[str],
     num_batches: int,
     worker_count: int,
+    schema_contexts: Sequence[SchemaGroundingContext] | None = None,
+    schema_profile=None,
 ) -> tuple[int, list[ExtractionResult]]:
     model_label = _llm_model_label()
-    prompt = build_triplet_extraction_prompt_batch(batch, predicates)
+    prompt = build_triplet_extraction_prompt_batch(batch, predicates, schema_contexts)
     started = perf_counter()
 
     try:
@@ -277,6 +308,16 @@ def _safe_extract_batch_via_llm(
         )
         parsed = ensure_json_object(response)
         results = coerce_triplets_batch(parsed, batch, allowed_predicates=predicates)
+        if schema_contexts is not None and schema_profile is not None:
+            results = [
+                validate_extraction_with_standard_schema(
+                    result,
+                    schema_contexts[i],
+                    profile=schema_profile,
+                    allowed_predicates=predicates,
+                )
+                for i, result in enumerate(results)
+            ]
     except Exception as exc:
         elapsed = perf_counter() - started
         print(

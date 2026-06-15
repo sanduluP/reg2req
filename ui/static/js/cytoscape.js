@@ -11,6 +11,7 @@ import { getLastSubgraphPayload } from "./state/graph_state.js";
 import { getKeyword } from "./state/oversight_state.js";
 import { exportSubgraphSentencesAsJson, exportSubgraphSentencesAsTxt } from "./utils/export_utils.js";
 import { showToast } from "./toast.js";
+import { formatPredicateLabel } from "./utils/predicate_format.js";
 
 
 export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "details-content") {
@@ -42,8 +43,10 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
     return color;
   }
 
-  function compactLabel(label, maxLength = 34) {
-    const value = String(label || "").replaceAll("_", " ").replaceAll(/\s+/g, " ").trim();
+  function compactLabel(label, maxLength = 34, { predicate = false } = {}) {
+    const value = (predicate ? formatPredicateLabel(label) : String(label || "").replaceAll("_", " "))
+      .replaceAll(/\s+/g, " ")
+      .trim();
     if (value.length <= maxLength) return value;
     return `${value.slice(0, maxLength - 1).trim()}…`;
   }
@@ -67,7 +70,7 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
 
     cy.edges().forEach(edge => {
       const label = String(edge.data("label") || "").trim();
-      edge.data("displayLabel", compactLabel(label, 28));
+      edge.data("displayLabel", compactLabel(label, 28, { predicate: true }));
     });
   }
 

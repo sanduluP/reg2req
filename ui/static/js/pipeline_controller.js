@@ -145,8 +145,8 @@ export function wirePipelineRunControls({
     const keyword = (keywordSel.value || "").trim();
     if (!keyword) return;
 
-    const file = fileInput.files?.[0];
-    if (!file) return;
+    const files = Array.from(fileInput.files || []);
+    if (files.length === 0) return;
 
     // If there is an existing session, confirm overwrite
     if (hasPipelineSession()) {
@@ -176,7 +176,7 @@ export function wirePipelineRunControls({
 
     let jobId;
     try {
-      const startResp = await startPipelineJob({ keyword, file });
+      const startResp = await startPipelineJob({ keyword, files });
       jobId = startResp.job_id;
     } catch (err) {
       // eslint-disable-next-line no-alert
@@ -215,6 +215,8 @@ export function wirePipelineRunControls({
             setRunContext({
               source: meta.source,
               source_name: meta.source_name || null,
+              source_names: Array.isArray(meta.source_names) ? meta.source_names : null,
+              num_documents: meta.num_documents || null,
               keyword: meta.keyword || keyword || null,
             });
           }

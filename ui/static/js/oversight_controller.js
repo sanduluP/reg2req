@@ -287,8 +287,12 @@ function sourcePopoverContent(result) {
   const headings = Array.isArray(metadata?.headings)
     ? metadata.headings.map(String).filter(Boolean)
     : [];
+  const docName = String(ctx?.doc_name || metadata?.source || "").trim();
 
   const parts = [];
+  if (docName) {
+    parts.push(`Document: ${docName}`);
+  }
   if (headings.length > 0) {
     parts.push(headings.join(" > "));
   }

@@ -12,7 +12,7 @@
  * - Progress section visibility
  */
 
-import { clearRunContext, hasRunContext } from "./state/oversight_state.js";
+import { clearRunContext } from "./state/oversight_state.js";
 import { resetHumanOversightUI, hasCandidateQualitiesUI } from "./oversight_controller.js";
 import { hasTripletsCache, resetExtractedTripletsUI } from "./extracted_triplets_controller.js";
 import { setOversightStep, OversightSteps } from "./oversight_stepper.js";
@@ -54,15 +54,20 @@ export function resetPipelineSession({ fileInputId = "documents" } = {}) {
 }
 
 /**
- * Does the UI currently contain an active "pipeline session"?
+ * Does the UI currently contain an active "pipeline session" worth warning about?
  *
- * We consider a session active if ANY of the following are true:
- * - provenance context exists (run_context)
+ * Only in-memory review state counts:
  * - extracted triplets cache exists
  * - candidate sentences are currently rendered in Step 1
+ *
+ * The persisted run context (localStorage) is intentionally NOT part of this
+ * check: it survives page reloads purely as provenance metadata, while the
+ * actual session (tables, cached triplets) does not. Warning on a stale
+ * context made the confirm dialog appear on every Run click after the first
+ * ever run, even when there was nothing on screen to lose.
  *
  * @returns {boolean}
  */
 export function hasPipelineSession() {
-    return hasRunContext() || hasTripletsCache() || hasCandidateQualitiesUI();
+    return hasTripletsCache() || hasCandidateQualitiesUI();
 }

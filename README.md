@@ -74,7 +74,7 @@ The simplest way to see the system in action is the hosted Space:
 
 👉 **[huggingface.co/spaces/faris-abuali/kbdebugger-demo](https://huggingface.co/spaces/faris-abuali/kbdebugger-demo/)**
 
-Upload a PDF, choose a keyword (e.g. `fairness`, `requirement`, `bias`), and watch the stages light up.
+Upload one or more PDFs, choose a keyword (e.g. `fairness`, `requirement`, `bias`), and watch the stages light up.
 
 ---
 
@@ -149,12 +149,16 @@ A redeploy of the public Space is one command away — see [`scripts/deploy_hf.s
 
 All pipeline behavior is **environment-driven** (see [`src/kbdebugger/pipeline/config.py`](src/kbdebugger/pipeline/config.py)):
 
+The committed `.env.example` is intentionally minimal and only shows connection/secret placeholders. Put local tuning values such as similarity mode, KeyBERT settings, synonym cache settings, and LLM worker counts in your ignored `.env`.
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `KB_RETRIEVAL_KEYWORD` | `requirement` | Topic to anchor the KG subgraph |
 | `KB_LIMIT_PER_PATTERN` | `50` | Max relations per retrieval pattern |
 | `KB_SOURCE_KIND` | `TEXT` | `TEXT` / `PDF_SENTENCES` / `PDF_CHUNKS` |
 | `KB_PDF_PATH` | `data/SDS/InstructCIR.pdf` | Corpus PDF |
+| `KB_DROP_REFERENCE_SECTION` | `true` | Drop a detected research-paper References/Bibliography section before KeyBERT and decomposition |
+| `KB_REFERENCE_SECTION_FILTER_MODE` | `conservative` | Conservative section-heading based reference filter |
 | `KB_ENCODER_MODEL_NAME` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model |
 | `KB_SIMILARITY_MODE` | `node_entity` | `node_entity` compares quality keyphrases to KG node labels; `sentence` keeps full quality sentence ↔ KG relation sentence comparison |
 | `KB_ENTITY_EXTRACTION_MODE` | `keybert` | `keybert` reuses cached KeyBERT/SentenceTransformer models; `simple` uses regex chunks with scikit-learn stop words |
@@ -176,30 +180,58 @@ All pipeline behavior is **environment-driven** (see [`src/kbdebugger/pipeline/c
 | `KB_TRIPLET_EXTRACTION_BATCH_SIZE` | `5` | Qualities per triplet-extraction call |
 | `KB_TRIPLET_EXTRACTION_PARALLEL` | `true` | Run triplet extraction batches concurrently |
 | `KB_TRIPLET_EXTRACTION_MAX_WORKERS` | `2` | Conservative worker count for triplet LLM calls |
+| `KB_SCHEMA_GROUNDING_ENABLED` | `true` | Use the current Neo4j graph as standard schema grounding during triplet extraction |
 | `DOCLING_ENABLE_OCR` | `false` | Toggle OCR in Docling |
 | `DOCLING_ENABLE_TABLE_RECOGNITION` | `false` | Parse table structure |
+
+### Compare tab (cross-document analysis)
+
+The **Compare** tab answers "what do the ingested standards agree on, where do they pull against each other, and where are they vague?" — entirely from the provenance layer, so every finding is traceable to a document, quality sentence, and source chunk.
+
+- **Overlap & Coverage** — per-document contribution summary, assertions supported by ≥2 documents, and a concept × document matrix (shared concepts first, single-document rows are coverage gaps). Concepts merge across reviewer-accepted SAME_AS clusters.
+- **Alignment** — embeds all KG node names and proposes high-similarity SAME_AS pairs for review. Accepting marks two terms as the same concept (`same_as` edge); rejecting persists a `not_same_as` edge so the pair never resurfaces — and high-similarity rejections feed the ambiguity report.
+- **Conflicts** — typed candidates generated from the graph (modality conflicts, definition divergence, reversed taxonomy, value/threshold conflicts), then adjudicated by an LLM judge (`AGREE / UNRELATED / TENSION / CONTRADICT` + one-line rationale, from the verbatim source texts). Reviewer-confirmed findings are written back as `(:Conflict)` nodes linked to their concepts.
+- **Ambiguity** — terms a document obligates but never defines (pure graph query), hedge/vague-language usage per document, and reviewer-rejected near-synonyms.
+
+Each view exports to `.xlsx`. Scans run as background jobs using the same job store/polling as the pipeline. API lives under `/api/comparison/*` ([`ui/routes/comparison_routes.py`](ui/routes/comparison_routes.py)); analysis code lives in [`src/kbdebugger/comparison/`](src/kbdebugger/comparison/).
+
+### Normative extraction (standards documents)
+
+- The standard predicate list includes normative predicates: `Requires`, `Recommends`, `Permits`, `Prohibits`, `Defines`.
+- The triplet extractor also classifies each quality's **modality** from its wording (shall → `MANDATORY`, should → `RECOMMENDED`, may → `OPTIONAL`, shall not → `PROHIBITED`). Modality is shown as a tag in the review table and stored inside each edge's provenance records — the same triple being `MANDATORY` in one standard and `RECOMMENDED` in another is exactly what the conflict scan detects.
+- Source-supported normative triplets are always `Schema-valid`: standards text is not forced through ML-operator schema templates.
+
+### Multi-document runs
+
+- The upload field accepts **one or more documents** per run. Each document is parsed and decomposed individually, so every quality keeps its document identity (`doc_name`, `doc_id`, chunk index, chunk text).
+- Similarity filtering and novelty classification run once over the combined pool of qualities; the KG subgraph is retrieved once per run.
+- On KG submission, every edge gets **append-only provenance**: `provenance_records` (JSON entries with doc name, original quality, chunk index, chunk excerpt) and `provenance_docs` (doc names). The same triple asserted by multiple documents keeps every document's provenance — this is the basis for cross-document overlap analysis.
 
 ### Current review flow
 
 - The quality screen is audit-only: it shows novelty-reviewed qualities and provenance, but no manual selection checkboxes or quality-level export.
 - Triplet extraction starts automatically for all visible reviewed qualities after novelty classification.
-- `NEW` and `PARTIALLY_NEW` triplets are included for KG submission by default; `EXISTING` triplets remain visible for traceability and are excluded by default.
+- `NEW`, `PARTIALLY_NEW`, **and `EXISTING`** triplets are included for KG submission by default. Submitting an `EXISTING` triple does not change the knowledge — it appends the new document's provenance to the edge, which is the cross-document overlap signal the Compare tab builds on.
+- Each review row has a single **Tags** column collecting all row signals: novelty decision, schema status (`Needs schema review` / `No schema fit` — schema-valid rows get no tag), `Non-standard predicate`, and the source document on multi-document runs. A tag dropdown above the table filters rows by any tag.
 - No-fit qualities remain visible in the triplet review screen as skipped/warning rows, with original quality and source chunk available.
 - The KG upsert route submits only rows where the reviewer left `include === true`.
 
-### Predicate-constrained triplets
+### Standard predicates
 
-Triplet extraction is backend-owned and predicate-controlled. Allowed predicates live in [`src/kbdebugger/extraction/predicate_options.py`](src/kbdebugger/extraction/predicate_options.py).
+Triplet extraction is backend-owned and predicate-controlled. The standard predicate list lives in [`src/kbdebugger/extraction/predicate_options.py`](src/kbdebugger/extraction/predicate_options.py) and can be extended there.
 
-- The extractor must use one of the allowed predicates exactly.
-- If no allowed predicate fits, it returns `skipped_reason` instead of forcing a hallucinated relationship.
+- The extractor is instructed to use one of the standard predicates exactly.
+- If no standard predicate fits, it returns `skipped_reason` instead of forcing a hallucinated relationship.
+- If the LLM still emits a predicate outside the standard list, the triplet is **kept, not dropped**: it is tagged `Non-standard predicate` in the review table, excluded from submission by default, and only written to the KG if the reviewer explicitly includes it (the predicate is then sanitized into a safe snake_case relationship type).
 - `Fallback` is only valid for explicit fallback mechanisms; it is not a catch-all.
+- When standard schema grounding is enabled (`KB_SCHEMA_GROUNDING_ENABLED`), the extractor derives compact node classes, predicate templates, examples, and aliases from the connected Neo4j graph and passes that context to the triplet LLM.
 
 ### Triplet review export
 
 The triplet review Export button writes an `.xlsx` audit workbook with one row per non-deleted triplet. Rows are grouped by source chunk and include:
 
 ```text
+Document
 Source Chunk
 Original Quality
 Nearest KG Match

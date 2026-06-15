@@ -29,6 +29,7 @@ import { refreshGraphForKeyword } from "./graph_refresh.js";
 import { fireConfetti } from "./confetti.js";
 import { resetPipelineSession } from "./ui_reset.js";
 import { exportTripletReviewAsXlsx } from "./utils/export_utils.js";
+import { formatPredicateLabel } from "./utils/predicate_format.js";
 
 
 /** Internal in-memory store of editable rows. */
@@ -36,7 +37,8 @@ const state = {
     rows: [],       // Array<TripletRow>
     skipped: [],    // Array<{sentence: string, reason: string}>
     allowedPredicates: [],
-    filter: "",     // current filter string
+    filter: "",     // current text filter string
+    tagFilter: "",  // current tag filter key ("" = all tags)
     deletedCount: 0 // derived
 };
 
@@ -48,6 +50,7 @@ const getCountEl = () => document.getElementById("triplets-count");
 const getDeletedCountEl = () => document.getElementById("triplets-deleted-count");
 const getExcludedCountEl = () => document.getElementById("triplets-excluded-count");
 const getFilterInput = () => document.getElementById("triplets-filter");
+const getTagFilterSelect = () => document.getElementById("triplets-tag-filter");
 const getSubmitBtn = () => document.getElementById("triplets-submit");
 const getBackBtn = () => document.getElementById("triplets-back");
 const getClearFilterBtn = () => document.getElementById("triplets-clear-filter");
@@ -87,9 +90,10 @@ function rowId({ sentence, subject, predicate, object }, idx) {
  * @param {any} extractedTripletsList job.result.extracted_triplets
  * @returns {TripletRow[]}
  */
-function normalizeExtractionResult(extractedTripletsList) {
+function normalizeExtractionResult(extractedTripletsList, allowedPredicates) {
     const rows = [];
     const skipped = [];
+    const allowed = new Set((allowedPredicates || []).map(String).filter(Boolean));
     let idx = 0;
 
     (extractedTripletsList || []).forEach(item => {
@@ -99,7 +103,16 @@ function normalizeExtractionResult(extractedTripletsList) {
         const decision = String(item?.decision || "").trim().toUpperCase();
         const maxScore = Number.isFinite(Number(item?.max_score)) ? Number(item.max_score) : null;
         const matchedNeighborSentence = String(item?.matched_neighbor_sentence || "").trim();
+        const schemaStatus = String(item?.schema_status || "").trim().toUpperCase();
+        const schemaTemplate = String(item?.schema_template || "").trim();
+        const groundingConfidence = Number.isFinite(Number(item?.grounding_confidence)) ? Number(item.grounding_confidence) : null;
+        const matchedSchemaNodes = Array.isArray(item?.matched_schema_nodes) ? item.matched_schema_nodes.map(String).filter(Boolean) : [];
+        const inferredNodeTypes = Array.isArray(item?.inferred_node_types) ? item.inferred_node_types.map(String).filter(Boolean) : [];
+        const schemaNotes = Array.isArray(item?.schema_notes) ? item.schema_notes.map(String).filter(Boolean) : [];
+        const schemaGrounding = item?.schema_grounding ?? null;
         const upsertEligible = item?.upsert_eligible !== false;
+        const docName = String(item?.source_context?.doc_name || item?.source_context?.metadata?.source || "").trim();
+        const modality = String(item?.modality || "").trim().toUpperCase();
 
         triplets.forEach(t => {
             const s = String(t?.[0] ?? "").trim();
@@ -109,16 +122,29 @@ function normalizeExtractionResult(extractedTripletsList) {
             // Skip empty junk rows defensively
             if (!s || !p || !o) return;
 
+            // Non-standard predicates stay visible but start excluded so the
+            // reviewer has to deliberately opt them in.
+            const nonStandard = allowed.size > 0 && !allowed.has(p);
+
             const row = {
                 id: rowId({ sentence, subject: s, predicate: p, object: o }, idx++),
                 sentence,
                 originalQuality: String(item?.original_quality || sentence).trim(),
                 sourceContext: item?.source_context ?? null,
+                docName,
+                modality,
                 decision,
                 maxScore,
                 matchedNeighborSentence,
+                schemaStatus,
+                schemaTemplate,
+                groundingConfidence,
+                matchedSchemaNodes,
+                inferredNodeTypes,
+                schemaNotes,
+                schemaGrounding,
                 upsertEligible,
-                include: upsertEligible,
+                include: upsertEligible && !nonStandard,
                 subject: s,
                 predicate: p,
                 object: o,
@@ -141,6 +167,13 @@ function normalizeExtractionResult(extractedTripletsList) {
                     decision,
                     maxScore,
                     matchedNeighborSentence,
+                    schemaStatus,
+                    schemaTemplate,
+                    groundingConfidence,
+                    matchedSchemaNodes,
+                    inferredNodeTypes,
+                    schemaNotes,
+                    schemaGrounding,
                     upsertEligible,
                 });
             }
@@ -162,18 +195,21 @@ export function renderExtractedTripletsFromJobResult(jobResult, { activate = tru
     }
 
     const extractedTriplets = jobResult?.extracted_triplets ?? [];
-    const normalized = normalizeExtractionResult(extractedTriplets);
-
-    state.rows = normalized.rows;
-    state.skipped = normalized.skipped;
     state.allowedPredicates = Array.isArray(jobResult?.allowed_predicates)
         ? jobResult.allowed_predicates.map(String).filter(Boolean)
         : [];
+
+    const normalized = normalizeExtractionResult(extractedTriplets, state.allowedPredicates);
+
+    state.rows = normalized.rows;
+    state.skipped = normalized.skipped;
     _hasTripletsCache = state.rows.length > 0 || state.skipped.length > 0; // cache rows or skipped notices for navigation without re-calling the API
     state.filter = "";
+    state.tagFilter = "";
 
     // Render
     wireTripletsToolbar(); // idempotent
+    renderTagFilterOptions();
     renderTripletsTable();
     renderSkippedNotices();
     updateTripletsCounters();
@@ -186,6 +222,7 @@ export function showCachedTripletsStep() {
     if (!hasTripletsCache()) return false;
     setOversightStep(OversightSteps.EXTRACTED_TRIPLETS);
     wireTripletsToolbar(); // idempotent
+    renderTagFilterOptions();
     renderTripletsTable();
     renderSkippedNotices();
     updateTripletsCounters();
@@ -221,8 +258,21 @@ function wireTripletsToolbar() {
         clearBtn.dataset.wired = "1";
         clearBtn.addEventListener("click", () => {
             state.filter = "";
+            state.tagFilter = "";
             const inp = getFilterInput();
             if (inp) inp.value = "";
+            const tagSel = getTagFilterSelect();
+            if (tagSel) tagSel.value = "";
+            renderTripletsTable();
+            updateTripletsCounters();
+        });
+    }
+
+    const tagFilterSel = getTagFilterSelect();
+    if (tagFilterSel && !tagFilterSel.dataset.wired) {
+        tagFilterSel.dataset.wired = "1";
+        tagFilterSel.addEventListener("change", () => {
+            state.tagFilter = (tagFilterSel.value ?? "").trim();
             renderTripletsTable();
             updateTripletsCounters();
         });
@@ -262,6 +312,124 @@ function decisionBadgeClass(decision) {
     return "text-bg-light";
 }
 
+function schemaStatusLabel(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "SCHEMA_VALID") return "Schema-valid";
+    if (value === "NEEDS_SCHEMA_REVIEW") return "Needs schema review";
+    if (value === "NO_SCHEMA_FIT") return "No schema fit";
+    return "Not checked";
+}
+
+function schemaRowClass(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "NEEDS_SCHEMA_REVIEW") return "table-warning";
+    if (value === "NO_SCHEMA_FIT") return "table-light";
+    return "";
+}
+
+/**
+ * Whether the review session spans more than one source document.
+ * Used to decide if rows should carry a document tag.
+ */
+function hasMultipleDocs() {
+    const names = new Set(
+        state.rows.map(r => String(r?.docName || "").trim()).filter(Boolean)
+    );
+    return names.size > 1;
+}
+
+/**
+ * Build the full tag list for a row. All row signals (novelty decision,
+ * schema status, non-standard predicate, source document) live in ONE
+ * Tags column. Schema-valid rows intentionally get no schema tag.
+ *
+ * @returns {Array<{key:string,label:string,cls:string}>}
+ */
+function rowTags(r, { multiDoc = hasMultipleDocs() } = {}) {
+    const tags = [];
+
+    const decision = String(r?.decision || "").trim().toUpperCase();
+    if (decision) {
+        tags.push({
+            key: `decision:${decision}`,
+            label: formatDecision(decision),
+            cls: decisionBadgeClass(decision),
+        });
+    }
+
+    const status = String(r?.schemaStatus || "").trim().toUpperCase();
+    if (status === "NEEDS_SCHEMA_REVIEW") {
+        tags.push({ key: "schema:NEEDS_SCHEMA_REVIEW", label: "Needs schema review", cls: "text-bg-warning" });
+    } else if (status === "NO_SCHEMA_FIT") {
+        tags.push({ key: "schema:NO_SCHEMA_FIT", label: "No schema fit", cls: "text-bg-danger" });
+    }
+    // SCHEMA_VALID and "not checked" intentionally produce no tag.
+
+    const predicate = String(r?.predicate || "").trim();
+    if (predicate && !isPredicateAllowed(predicate)) {
+        tags.push({
+            key: "predicate:NON_STANDARD",
+            label: "Non-standard predicate",
+            cls: "text-bg-danger",
+        });
+    }
+
+    const modality = String(r?.modality || "").trim().toUpperCase();
+    if (modality && modality !== "NONE") {
+        const modalityCls = modality === "MANDATORY" ? "text-bg-primary"
+            : modality === "PROHIBITED" ? "text-bg-dark"
+            : "text-bg-secondary";
+        tags.push({ key: `modality:${modality}`, label: modality.toLowerCase(), cls: modalityCls });
+    }
+
+    const docName = String(r?.docName || "").trim();
+    if (docName && multiDoc) {
+        tags.push({ key: `doc:${docName}`, label: docName, cls: "text-bg-info" });
+    }
+
+    return tags;
+}
+
+/**
+ * Populate the tag filter dropdown from the tags present in current rows.
+ * Keeps the current selection when still available.
+ */
+function renderTagFilterOptions() {
+    const sel = getTagFilterSelect();
+    if (!sel) return;
+
+    const multiDoc = hasMultipleDocs();
+    const seen = new Map(); // key -> label
+    for (const r of state.rows) {
+        for (const tag of rowTags(r, { multiDoc })) {
+            if (!seen.has(tag.key)) seen.set(tag.key, tag.label);
+        }
+    }
+
+    const current = state.tagFilter;
+    const options = ['<option value="">All tags</option>'];
+    for (const [key, label] of seen.entries()) {
+        const selected = key === current ? "selected" : "";
+        options.push(`<option value="${escapeHtml(key)}" ${selected}>${escapeHtml(label)}</option>`);
+    }
+    sel.innerHTML = options.join("");
+
+    if (current && !seen.has(current)) {
+        state.tagFilter = "";
+        sel.value = "";
+    }
+}
+
+function formatGroundingConfidence(value) {
+    return Number.isFinite(value) ? value.toFixed(2) : "n/a";
+}
+
+function formatSchemaTemplateText(value) {
+    return String(value || "").replace(/--([A-Za-z_][A-Za-z0-9_]*)-->/g, (_match, predicate) => {
+        return `--${formatPredicateLabel(predicate)}-->`;
+    });
+}
+
 function tripletPopoverTitle(row) {
     const ctx = row?.sourceContext;
     const rawIndex = ctx?.source_doc_index;
@@ -276,6 +444,9 @@ function provenanceText(item) {
     const quality = String(item?.originalQuality || item?.sentence || "").trim();
     if (quality) parts.push(`Original quality:\n${quality}`);
 
+    const docName = String(item?.docName || item?.sourceContext?.doc_name || item?.sourceContext?.metadata?.source || "").trim();
+    if (docName) parts.push(`Document: ${docName}`);
+
     const decision = String(item?.decision || "").trim();
     if (decision) parts.push(`Novelty decision: ${formatDecision(decision)}`);
 
@@ -285,6 +456,24 @@ function provenanceText(item) {
 
     const neighbor = String(item?.matchedNeighborSentence || "").trim();
     if (neighbor) parts.push(`Nearest KG match:\n${neighbor}`);
+
+    const schemaStatus = String(item?.schemaStatus || "").trim();
+    const schemaParts = [];
+    if (schemaStatus) schemaParts.push(`Status: ${schemaStatusLabel(schemaStatus)}`);
+    if (Number.isFinite(item?.groundingConfidence)) {
+        schemaParts.push(`Grounding confidence: ${formatGroundingConfidence(item.groundingConfidence)}`);
+    }
+    if (Array.isArray(item?.matchedSchemaNodes) && item.matchedSchemaNodes.length) {
+        schemaParts.push(`Schema hints: ${item.matchedSchemaNodes.join(", ")}`);
+    }
+    if (Array.isArray(item?.inferredNodeTypes) && item.inferredNodeTypes.length) {
+        schemaParts.push(`Inferred node types: ${item.inferredNodeTypes.join(", ")}`);
+    }
+    if (item?.schemaTemplate) schemaParts.push(`Schema template:\n${item.schemaTemplate}`);
+    if (Array.isArray(item?.schemaNotes) && item.schemaNotes.length) {
+        schemaParts.push(`Schema notes:\n${item.schemaNotes.join("\n")}`);
+    }
+    if (schemaParts.length) parts.push(`Schema grounding:\n${schemaParts.join("\n\n")}`);
 
     const ctx = item?.sourceContext;
     const metadata = ctx?.metadata || {};
@@ -334,17 +523,22 @@ function isPredicateAllowed(predicate) {
 }
 
 /**
- * Apply filter + hide deleted rows? (We keep deleted visible but greyed, so user can undo later.)
- * Filtering checks subject/predicate/object/sentence.
+ * Apply text + tag filters. Deleted rows stay visible but greyed, so user can undo later.
+ * Text filtering checks subject/predicate/object; tag filtering checks row tags.
  */
 function getVisibleRows() {
     const q = state.filter;
-    if (!q) return state.rows;
+    const tag = state.tagFilter;
+    const multiDoc = hasMultipleDocs();
 
     return state.rows.filter(r => {
-        // const hay = `${r.subject} ${r.predicate} ${r.object} ${r.sentence}`.toLowerCase();
-        const hay = `${r.subject} ${r.predicate} ${r.object}`.toLowerCase();
-        return hay.includes(q); // i.e., show the row if the filter query is a substring of any of the fields 
+        if (tag) {
+            const keys = rowTags(r, { multiDoc }).map(t => t.key);
+            if (!keys.includes(tag)) return false;
+        }
+        if (!q) return true;
+        const hay = `${r.subject} ${r.predicate} ${formatPredicateLabel(r.predicate)} ${r.object}`.toLowerCase();
+        return hay.includes(q); // i.e., show the row if the filter query is a substring of any of the fields
     });
 }
 
@@ -372,7 +566,7 @@ function renderTripletsTable() {
         <th>Subject</th>
         <th>Predicate</th>
         <th>Object</th>
-        <th style="width: 132px;">Decision</th>
+        <th style="width: 220px;">Tags</th>
         <th style="width: 84px;" class="text-end">Actions</th>
       </tr>
     </thead>
@@ -380,10 +574,19 @@ function renderTripletsTable() {
   `;
 
     const tbody = table.querySelector("tbody");
+    const multiDoc = hasMultipleDocs();
 
     rows.forEach(r => {
         const tr = document.createElement("tr");
+        const tags = rowTags(r, { multiDoc });
+        const schemaClass = schemaRowClass(r.schemaStatus);
+        if (schemaClass) tr.classList.add(schemaClass);
+        else if (tags.some(t => t.key === "predicate:NON_STANDARD")) tr.classList.add("table-warning");
         if (r.deleted) tr.classList.add("opacity-50"); // soft-delete: visually indicate deleted rows but keep them visible
+
+        const tagsHtml = tags.length
+            ? tags.map(t => `<span class="badge ${t.cls} me-1 mb-1">${escapeHtml(t.label)}</span>`).join("")
+            : `<span class="text-muted small">—</span>`;
 
         tr.innerHTML = `
       <td class="text-center">
@@ -408,7 +611,7 @@ function renderTripletsTable() {
       <td>${editableCell("subject", r)}</td>
       <td>${editableCell("predicate", r)}</td>
       <td>${editableCell("object", r)}</td>
-      <td><span class="badge ${decisionBadgeClass(r.decision)}">${escapeHtml(formatDecision(r.decision))}</span></td>
+      <td>${tagsHtml}</td>
 
       <td class="text-end">
         <div class="btn-group btn-group-sm">
@@ -465,6 +668,8 @@ function renderTripletsTable() {
  * We use input-sm to keep the table compact.
  */
 function editableCell(field, row) {
+    if (field === "predicate") return predicateCell(row);
+
     const value = escapeHtml(row[field] ?? "");
     const disabled = row.deleted ? "disabled" : "";
     return `
@@ -478,18 +683,60 @@ function editableCell(field, row) {
   `;
 }
 
+function predicateCell(row) {
+    const rawPredicate = String(row?.predicate || "").trim();
+    const disabled = row.deleted ? "disabled" : "";
+    const options = [...state.allowedPredicates];
+    if (rawPredicate && !options.includes(rawPredicate)) options.unshift(rawPredicate);
+
+    if (options.length === 0) {
+        return `
+    <input
+      type="text"
+      class="form-control form-control-sm"
+      data-field="predicate"
+      value="${escapeHtml(rawPredicate)}"
+      title="${escapeHtml(formatPredicateLabel(rawPredicate))}"
+      ${disabled}
+    />
+  `;
+    }
+
+    return `
+    <select
+      class="form-select form-select-sm"
+      data-field="predicate"
+      title="${escapeHtml(rawPredicate)}"
+      ${disabled}
+    >
+      ${options.map(predicate => `
+        <option value="${escapeHtml(predicate)}" ${predicate === rawPredicate ? "selected" : ""}>
+          ${escapeHtml(formatPredicateLabel(predicate))}
+        </option>
+      `).join("")}
+    </select>
+  `;
+}
+
 /**
  * After row HTML is inserted, attach listeners to inputs to update state.
  * @param {HTMLElement} tr
  * @param {TripletRow} row
  */
 function wireEditableInputs(tr, row) {
-    tr.querySelectorAll("input[data-field]").forEach(inp => {
+    tr.querySelectorAll("input[data-field], select[data-field]").forEach(inp => {
         inp.addEventListener("input", () => {
             const field = inp.dataset.field;
             const v = (inp.value ?? "").trim();
             row[field] = v;
             updateTripletsCounters();
+
+            // Predicate edits can add/remove the "Non-standard predicate" tag,
+            // so refresh the table and the tag filter options.
+            if (field === "predicate") {
+                renderTagFilterOptions();
+                renderTripletsTable();
+            }
         });
     });
 }
@@ -508,14 +755,16 @@ function updateTripletsCounters() {
     const deleted = state.rows.filter(r => r.deleted).length;
     const excluded = state.rows.filter(r => !r.deleted && !r.include).length;
 
-    const invalidPredicateCount = state.rows.filter(r => {
-        if (r.deleted || !r.include || !r.predicate?.trim()) return false;
-        return !isPredicateAllowed(r.predicate.trim());
-    }).length;
-
+    // Non-standard predicates are allowed in submission once the reviewer has
+    // explicitly included the row — they are tagged, not blocked.
     const valid = state.rows.filter(r => {
         if (r.deleted || !r.include) return false;
-        return Boolean(r.subject?.trim() && r.predicate?.trim() && r.object?.trim() && isPredicateAllowed(r.predicate.trim()));
+        return Boolean(r.subject?.trim() && r.predicate?.trim() && r.object?.trim());
+    }).length;
+
+    const includedNonStandard = state.rows.filter(r => {
+        if (r.deleted || !r.include || !r.predicate?.trim()) return false;
+        return !isPredicateAllowed(r.predicate.trim());
     }).length;
 
     if (countEl) countEl.textContent = String(valid);
@@ -523,9 +772,9 @@ function updateTripletsCounters() {
     if (excludedEl) excludedEl.textContent = String(excluded);
 
     if (submitBtn) {
-        submitBtn.disabled = (valid === 0 || invalidPredicateCount > 0);
-        submitBtn.title = invalidPredicateCount > 0
-            ? "One or more included predicates are not in the allowed relationship type list."
+        submitBtn.disabled = (valid === 0);
+        submitBtn.title = includedNonStandard > 0
+            ? `${includedNonStandard} included triplet(s) use a non-standard predicate. They will be written with a sanitized relationship type.`
             : "";
     }
 }
@@ -534,17 +783,20 @@ function updateTripletsCounters() {
  * Build the payload to send to the server for KG upsert.
  *
  * The Python upsert expects: Sequence[ExtractionResult], where each item is:
- *   { sentence: str, triplets: [(subject, object, predicate), ...] }
+ *   { sentence: str, triplets: [(subject, object, predicate), ...], provenance?: {...} }
  *
  * We therefore:
  * - drop deleted rows
  * - drop rows with missing S/P/O
- * - group remaining rows by sentence
+ * - group remaining rows by (document, sentence) so provenance stays per-doc
+ * - attach {doc_name, quality, chunk_index, chunk_excerpt} provenance per group
  * - emit `extractions` in the exact expected shape
  *
- * @returns {{ extractions: Array<{sentence: string, triplets: Array<[string,string,string]>}>, source?: string }}
+ * @returns {{ extractions: Array<{sentence: string, triplets: Array<[string,string,string]>, provenance?: Object}>, source?: string }}
  */
 function buildUpsertPayload() {
+    const fallbackDoc = getOversightSource() || "";
+
     const rows = state.rows
         .filter(r => !r.deleted && r.include)
         .map(r => ({
@@ -552,39 +804,72 @@ function buildUpsertPayload() {
             subject: (r.subject ?? "").trim(),
             predicate: (r.predicate ?? "").trim(),
             object: (r.object ?? "").trim(),
+            row: r,
         }))
         .filter(r => r.sentence && r.subject && r.predicate && r.object);
 
-    /** @type {Map<string, Array<[string,string,string]>>} */
-    const bySentence = new Map();
+    /** @type {Map<string, {sentence: string, triplets: Array<[string,string,string]>, provenance: Object|null}>} */
+    const byGroup = new Map();
 
     for (const r of rows) {
-        if (!bySentence.has(r.sentence)) bySentence.set(r.sentence, []);
+        const provenance = rowProvenance(r.row, fallbackDoc);
+        const groupKey = `${provenance?.doc_name || ""}::${r.sentence}`;
+
+        if (!byGroup.has(groupKey)) {
+            byGroup.set(groupKey, { sentence: r.sentence, triplets: [], provenance });
+        }
         // IMPORTANT: backend expects (Subject, Object, Predicate)
-        bySentence.get(r.sentence).push([r.subject, r.object, r.predicate]);
+        byGroup.get(groupKey).triplets.push([r.subject, r.object, r.predicate]);
     }
 
-    // Before submitting, we might want to deduplicate identical triplets inside each sentence (LLM sometimes repeats):
-    for (const [sentence, triplets] of bySentence.entries()) {
+    // Deduplicate identical triplets inside each group (LLM sometimes repeats):
+    for (const group of byGroup.values()) {
         const seen = new Set();
         const uniq = [];
-        for (const t of triplets) {
+        for (const t of group.triplets) {
             const key = t.join("||");
             if (seen.has(key)) continue;
             seen.add(key);
             uniq.push(t);
         }
-        bySentence.set(sentence, uniq);
+        group.triplets = uniq;
     }
 
     // ✅ Convert Map -> expected payload array
-    const extractions = Array.from(bySentence.entries())
-        .map(([sentence, triplets]) => ({ sentence, triplets }))
-        .filter(x => x.triplets.length > 0);
+    const extractions = Array.from(byGroup.values())
+        .filter(x => x.triplets.length > 0)
+        .map(({ sentence, triplets, provenance }) => (
+            provenance ? { sentence, triplets, provenance } : { sentence, triplets }
+        ));
 
     const source = getOversightSource();
 
     return source ? { extractions, source } : { extractions };
+}
+
+/**
+ * Build the structured provenance payload for one row:
+ * which document, which quality, which source chunk.
+ */
+function rowProvenance(row, fallbackDoc) {
+    const ctx = row?.sourceContext || {};
+    const docName = String(row?.docName || ctx?.doc_name || ctx?.metadata?.source || fallbackDoc || "").trim();
+    const quality = String(row?.originalQuality || row?.sentence || "").trim();
+    const rawIndex = ctx?.source_doc_index;
+    const chunkIndex = Number.isInteger(rawIndex) ? rawIndex : null;
+    const chunkExcerpt = String(ctx?.source_text || "").trim().slice(0, 500);
+    const modality = String(row?.modality || "").trim().toUpperCase();
+
+    if (!docName && !quality && chunkIndex === null && !chunkExcerpt) return null;
+
+    const provenance = {
+        doc_name: docName,
+        quality,
+        chunk_index: chunkIndex,
+        chunk_excerpt: chunkExcerpt,
+    };
+    if (modality && modality !== "NONE") provenance.modality = modality;
+    return provenance;
 }
 
 /**
@@ -723,7 +1008,11 @@ export function resetExtractedTripletsUI() {
     state.skipped = [];
     state.allowedPredicates = [];
     state.filter = "";
+    state.tagFilter = "";
     _hasTripletsCache = false;
+
+    const tagSel = getTagFilterSelect();
+    if (tagSel) tagSel.innerHTML = '<option value="">All tags</option>';
 
     const wrap = getTableWrap();
     if (wrap) wrap.innerHTML = "";

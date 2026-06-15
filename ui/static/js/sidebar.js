@@ -1,3 +1,5 @@
+import { formatPredicateLabel } from "./utils/predicate_format.js";
+
 const detailsPanel = document.getElementById("details-panel") // aka sidebar or insights panel
 
 function escapeHtml(s) {
@@ -256,6 +258,7 @@ export function renderEdgeDetails(container, edgeData) {
   const props = edgeData?.properties || {};
 
   const relationLabel = edgeData?.label || props?.label || "relation";
+  const relationDisplayLabel = formatPredicateLabel(relationLabel);
   const sentence = props.sentence || "";
   const source = props.source || "";
   const createdAt = props.created_at || null;
@@ -263,7 +266,7 @@ export function renderEdgeDetails(container, edgeData) {
 
   container.innerHTML = `
     <div class="mb-2">
-      <span class="badge text-bg-primary">${escapeHtml(relationLabel)}</span>
+      <span class="badge text-bg-primary" title="${escapeHtml(relationLabel)}">${escapeHtml(relationDisplayLabel)}</span>
     </div>
 
     ${sentenceCallout(sentence)}
@@ -305,6 +308,7 @@ export function renderNodeDetails(container, nodeData, incidentEdges, onEdgePick
     const srcLabel = e.source()?.data("label") ?? d.source;
     const tgtLabel = e.target()?.data("label") ?? d.target;
     const relLabel = d.label ?? "relation";
+    const relDisplayLabel = formatPredicateLabel(relLabel);
     const sentence = (d.properties && d.properties.sentence) ? d.properties.sentence : "";
 
     return `
@@ -314,7 +318,7 @@ export function renderNodeDetails(container, nodeData, incidentEdges, onEdgePick
            data-edge-id="${escapeHtml(d.id)}"
            style="cursor:pointer;"
            title="↗️ Go to relation">
-        ${badgeTriplet(srcLabel, relLabel, tgtLabel)}
+        ${badgeTriplet(srcLabel, relDisplayLabel, tgtLabel)}
         ${scrollableSentenceLine(sentence)}
       </div>
     `;

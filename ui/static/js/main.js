@@ -10,6 +10,7 @@ import { createCytoscapeGraph } from "./cytoscape.js";
 import { initKeywordDropdown } from "./keyword_dropdown_controller.js";
 import { wirePipelineRunControls } from "./pipeline_controller.js";
 import { wireHumanOversightSubmit, renderHumanOversightFromPipelineResult, wireGoToTripletsButton } from "./oversight_controller.js";
+import { wireComparisonView } from "./comparison_controller.js";
 import { registerSubgraphRenderer } from "./graph_refresh.js";
 import { hideProgressPanel } from "./pipeline_progress_ui.js"
 
@@ -55,6 +56,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   wireHumanOversightSubmit({});
+
+  // ---------------------------------------------------------------------------
+  // 4) Compare tab (cross-document overlap / alignment / conflicts / ambiguity)
+  // ---------------------------------------------------------------------------
+  wireComparisonView();
 
   // // ---------------------------------------------------------------------------
   // // 4) Optional: graph free-text search (if you keep that UI)

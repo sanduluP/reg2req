@@ -85,7 +85,10 @@ def _decompose_one_batch(
     return batch_id, _chunk_batch_to_qualities_decomposer(group)
 
 
-def _safe_chunk_batch_to_qualities_decomposer(group: List[str]) -> List[Qualities]:
+def _safe_chunk_batch_to_qualities_decomposer(
+    group: List[str],
+    failures: Optional[List[str]] = None,
+) -> List[Qualities]:
     """
     Safe wrapper around the batched decomposer.
 
@@ -99,13 +102,34 @@ def _safe_chunk_batch_to_qualities_decomposer(group: List[str]) -> List[Qualitie
     --------
     Returns `List[Qualities]` aligned with `group` length:
       - one Qualities list per input chunk text
-      - on failure: returns `[[], [], ...]` (same length as group)
+      - on failure: returns `[[], [], ...]` (same length as group) and appends
+        the error message to `failures` so the caller can distinguish
+        "LLM produced nothing" from "LLM call failed"
     """
     try:
         return _chunk_batch_to_qualities_decomposer(group)
     except Exception as e:  # noqa: BLE001 (intentionally broad in pipeline boundary)
         print(f"[decompose_documents] Batch failed (size={len(group)}): {e}")
+        if failures is not None:
+            failures.append(str(e))
         return [[] for _ in range(len(group))]
+
+
+def _raise_if_all_batches_failed(failures: List[str], num_batches: int) -> None:
+    """
+    A run where EVERY batch raised is an infrastructure failure (LLM backend
+    unreachable, bad credentials, decommissioned model), not "no knowledge in
+    the document" — surface it as a job error instead of 0 qualities.
+    """
+    if num_batches > 0 and len(failures) >= num_batches:
+        backend = os.getenv("MODEL_BACKEND", "http")
+        service_url = os.getenv("MODEL_SERVICE_URL", "")
+        raise RuntimeError(
+            f"LLM decomposition failed for all {num_batches} batch(es) — the LLM backend "
+            f"is likely unreachable or misconfigured (MODEL_BACKEND={backend!r}"
+            + (f", MODEL_SERVICE_URL={service_url!r}" if service_url else "")
+            + f"). Last error: {failures[-1]}"
+        )
 
 
 def _doc_source_context(doc: Document, index: int) -> dict[str, Any]:
@@ -122,7 +146,7 @@ def _doc_source_context(doc: Document, index: int) -> dict[str, Any]:
             headings = [str(h) for h in raw_headings if str(h).strip()]
 
     compact_metadata: dict[str, Any] = {}
-    for key in ("source", "page", "page_no", "page_number"):
+    for key in ("source", "doc_id", "page", "page_no", "page_number"):
         value = metadata.get(key)
         if isinstance(value, (str, int, float, bool)):
             compact_metadata[key] = value
@@ -181,11 +205,12 @@ def decompose_documents(
     # --- Fast path: batched chunk decomposition ---
     if mode == DecomposeMode.CHUNKS and use_batch_decomposer:
         num_batches = math.ceil(len(texts) / batch_size)
+        batch_failures: List[str] = []
 
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 results_iter = pool.map(
-                    _safe_chunk_batch_to_qualities_decomposer,
+                    lambda group: _safe_chunk_batch_to_qualities_decomposer(group, batch_failures),
                     batched(texts, batch_size=batch_size),
                 )
 
@@ -232,7 +257,9 @@ def decompose_documents(
                         f"🧷 LLM Decomposer: Processing batch ({batch_idx+1}/{num_batches}) ..."
                     )
 
-                group_results: List[Qualities] = _chunk_batch_to_qualities_decomposer(group)
+                group_results: List[Qualities] = _safe_chunk_batch_to_qualities_decomposer(
+                    group, batch_failures
+                )
                 start_idx = batch_idx * batch_size
                 for offset, qualities in enumerate(group_results):
                     source_context = source_contexts[start_idx + offset]
@@ -245,6 +272,8 @@ def decompose_documents(
                         for quality in qualities
                     )
 
+        _raise_if_all_batches_failed(batch_failures, num_batches)
+
         log_payload = save_qualities_json(
             qualities=all_qualities,
             quality_sources=quality_sources,
@@ -256,6 +285,9 @@ def decompose_documents(
             parallel=parallel,
             max_workers=max_workers if parallel else None,
         )
+        if batch_failures:
+            log_payload["num_failed_batches"] = len(batch_failures)
+            log_payload["batch_failure_messages"] = batch_failures[:5]
         return all_qualities, log_payload
 
     # --- Default path: one document -> one decompose() call ---

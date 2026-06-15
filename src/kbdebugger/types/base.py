@@ -20,6 +20,16 @@ class ExtractionResult(TypedDict):
     max_score: NotRequired[float]
     matched_neighbor_sentence: NotRequired[str]
     upsert_eligible: NotRequired[bool]
+    schema_status: NotRequired[str]
+    schema_template: NotRequired[str]
+    grounding_confidence: NotRequired[float]
+    matched_schema_nodes: NotRequired[list[str]]
+    inferred_node_types: NotRequired[list[str]]
+    schema_notes: NotRequired[list[str]]
+    schema_grounding: NotRequired[Any]
+    non_standard_predicates: NotRequired[list[str]]
+    modality: NotRequired[str]  # MANDATORY | RECOMMENDED | OPTIONAL | PROHIBITED
+    provenance: NotRequired[Any]  # {doc_name, quality, chunk_index, chunk_excerpt, modality}
 
 class GraphEnd(TypedDict):
     label: str
@@ -50,6 +60,7 @@ class EdgeProperties(TypedDict, total=False):
     end_index: NotRequired[int]
     doc_id: NotRequired[str]                 # internal ID of the doc/chunk
     chunk_id: NotRequired[str]               # if you chunked documents
+    provenance: NotRequired[Any]             # structured {doc_name, quality, chunk_index, chunk_excerpt}; serialized before Neo4j write
 
     # ------- Quality / versioning -------
     confidence: NotRequired[float]           # model confidence if available

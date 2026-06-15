@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import rich
 
-from typing import Any, Dict, Mapping, Mapping, Sequence, cast, List
+from typing import Any, Dict, Mapping, Sequence, cast, List
 from dataclasses import asdict
 
 from kbdebugger.subgraph_similarity.types import KeptQuality, NeighborHit
@@ -81,6 +81,16 @@ def _coerce_float_0_1(value: Any, *, field: str) -> float:
     return f
 
 
+def _coerce_optional_confidence(value: Any) -> float:
+    if value is None or str(value).strip() == "":
+        return 0.5
+    try:
+        return _coerce_float_0_1(value, field="confidence")
+    except ValueError as exc:
+        rich.print(f"[coerce_quality_novelty_result] ⚠️ {exc}; defaulting confidence to 0.5.")
+        return 0.5
+
+
 def coerce_quality_novelty_result(
         parsed: Mapping[str, Any],
         *,
@@ -120,7 +130,7 @@ def coerce_quality_novelty_result(
     else:
         matched = None
 
-    confidence = _coerce_float_0_1(obj.get("confidence"), field="confidence")
+    confidence = _coerce_optional_confidence(obj.get("confidence"))
 
     # Small consistency guard:
     # EXISTING should not claim novel spans; if it does, downgrade to PARTIALLY_NEW.
@@ -183,60 +193,119 @@ def kept_batch_to_prompt_items(
     return items
 
 
-def _extract_batched_results_by_id(parsed: Mapping[str, Any]) -> Dict[int, Mapping[str, Any]]:
-    """
-    Extract the batched novelty results into an id -> payload mapping.
+_BATCH_RESULT_KEYS = ("results", "items", "classifications", "novelty_results", "decisions")
+_ID_KEYS = ("id", "item_id", "index")
 
-    Expected input format
-    ---------------------
-    parsed = {
-      "results": [
-        {"id": 1, "decision": "...", "rationale": "...", ...},
-        {"id": 2, "decision": "...", "rationale": "...", ...},
-        ...
-      ]
-    }
 
-    Expected output format
-    ----------------------
-    {
-        1: {"decision": "...", "rationale": "...", ...},  # payload for item with id 1
-        2: {"decision": "...", "rationale": "...", ...},  # payload for item with id 2
-        ...
-    }
+def _coerce_result_id(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
 
-    Returns
-    -------
-    dict[int, Mapping[str, Any]]
-        Mapping from item id -> novelty payload dict.
 
-    Raises
-    ------
-    ValueError
-        If the response structure is invalid (missing results array, wrong types).
-    """
-    results_raw = parsed.get("results")
-    if not isinstance(results_raw, list):
-        raise ValueError("Batched novelty response missing 'results' array.")
+def _payload_without_id(entry: Mapping[str, Any]) -> dict[str, Any]:
+    payload = dict(entry)
+    for key in _ID_KEYS:
+        payload.pop(key, None)
+    return payload
 
-    id_to_response: Dict[int, Mapping[str, Any]] = {}
 
-    for entry in results_raw:
-        if not isinstance(entry, dict):
+def _extract_from_mapping_by_id(value: Mapping[str, Any]) -> Dict[int, Mapping[str, Any]]:
+    out: Dict[int, Mapping[str, Any]] = {}
+    for key, payload in value.items():
+        rid = _coerce_result_id(key)
+        if rid is None or not isinstance(payload, Mapping):
+            continue
+        out[rid] = dict(payload)
+    return out
+
+
+def _extract_from_result_list(
+    value: Sequence[Any],
+    *,
+    expected_ids: Sequence[int] | None = None,
+) -> Dict[int, Mapping[str, Any]]:
+    out: Dict[int, Mapping[str, Any]] = {}
+    positional_payloads: list[Mapping[str, Any]] = []
+
+    for entry in value:
+        if not isinstance(entry, Mapping):
             continue
 
-        rid = entry.get("id")
+        rid = None
+        for key in _ID_KEYS:
+            rid = _coerce_result_id(entry.get(key))
+            if rid is not None:
+                break
 
-        if not isinstance(rid, int):
-            continue
-        
-        # payload is the entry itself minus "id"
-        payload = dict(entry)
-        payload.pop("id", None)
+        payload = _payload_without_id(entry)
+        if rid is None:
+            positional_payloads.append(payload)
+        else:
+            out[rid] = payload
 
-        id_to_response[rid] = payload
+    if not out and expected_ids and len(positional_payloads) == len(expected_ids):
+        return {rid: payload for rid, payload in zip(expected_ids, positional_payloads)}
 
-    return id_to_response
+    return out
+
+
+def _extract_batched_results_by_id(
+    parsed: Mapping[str, Any],
+    *,
+    expected_ids: Sequence[int] | None = None,
+) -> Dict[int, Mapping[str, Any]]:
+    """Extract batched novelty results from strict and common alternate JSON shapes."""
+    expected_ids = tuple(expected_ids or ())
+
+    for key in _BATCH_RESULT_KEYS:
+        value = parsed.get(key)
+        if isinstance(value, list):
+            found = _extract_from_result_list(value, expected_ids=expected_ids)
+            if found:
+                return found
+        if isinstance(value, Mapping):
+            found = _extract_from_mapping_by_id(value)
+            if found:
+                return found
+
+    found = _extract_from_mapping_by_id(parsed)
+    if found:
+        return found
+
+    direct_id = None
+    for key in _ID_KEYS:
+        direct_id = _coerce_result_id(parsed.get(key))
+        if direct_id is not None:
+            break
+    if direct_id is not None:
+        return {direct_id: _payload_without_id(parsed)}
+
+    if len(expected_ids) == 1 and "decision" in parsed:
+        return {expected_ids[0]: dict(parsed)}
+
+    return {}
+
+
+def _fallback_novelty_result(
+    novelty_input: QualityNoveltyInput,
+    *,
+    reason: str,
+) -> QualityNoveltyResult:
+    matched = novelty_input.neighbors[0].sentence if novelty_input.neighbors else None
+    return QualityNoveltyResult(
+        quality=novelty_input.quality,
+        max_score=novelty_input.max_score,
+        decision=NoveltyDecision.PARTIALLY_NEW,
+        rationale=reason,
+        novel_spans=[],
+        matched_neighbor_sentence=matched,
+        confidence=0.0,
+    )
 
 
 def coerce_batched_novelty_response(
@@ -247,58 +316,41 @@ def coerce_batched_novelty_response(
     """
     Parse + validate batched LLM response and coerce into typed results.
 
-    This function enforces alignment between:
-    - the ids we sent in the prompt
-    - the ids the model returned
-
-    Then it reuses the single-item coercion routine for each payload.
-
-    Parameters
-    ----------
-    parsed:
-        JSON object produced by ensure_json_object(...).
-
-    id_to_input:
-        Mapping from item id -> original typed novelty input.
-        
-        1. We need this to enrich the result with the original `quality` text and `max_score`,
-        since the LLM response doesn't have to include those (and often shouldn't, to save tokens and reduce error surface).
-
-        2. Also we use to validate that the LLM returned results for all expected ids and no unexpected ids.
-
-    Returns
-    -------
-    list[QualityNoveltyResult]
-        Results aligned by ascending id order (stable and deterministic).
-
-    Raises
-    ------
-    ValueError
-        If the model output is missing ids or contains unexpected ids.
+    The preferred contract is {"results": [{"id": ..., ...}]}. For robustness
+    with reasoning models, common wrapper variations are accepted. Missing items
+    are kept for review as PARTIALLY_NEW instead of failing the whole pipeline.
     """
-    id_to_response = _extract_batched_results_by_id(parsed)
+    expected_order = sorted(id_to_input.keys())
+    id_to_response = _extract_batched_results_by_id(parsed, expected_ids=expected_order)
 
-    expected_ids = set(id_to_input.keys()) # ids that we sent to the LLM prompt
-    received_ids = set(id_to_response.keys()) # ids that the LLM returned in its response
-
+    expected_ids = set(expected_order)
+    received_ids = set(id_to_response.keys())
     missing = sorted(expected_ids - received_ids)
     extra = sorted(received_ids - expected_ids)
 
     if missing or extra:
-        raise ValueError(
-            "Batched novelty response id mismatch.\n"
-            f"Missing ids: {missing}\n"
-            f"Extra ids: {extra}"
+        rich.print(
+            "[coerce_batched_novelty_response] ⚠️ Batched novelty response id mismatch; "
+            f"missing={missing}, extra={extra}. Missing items will be kept as PARTIALLY_NEW."
         )
 
-    # Single source of truth for decision parsing / defaults / guards:
     out: List[QualityNoveltyResult] = []
-    for rid in sorted(expected_ids):
+    for rid in expected_order:
         novelty_input = id_to_input[rid]
-        payload = id_to_response[rid]
-        out.append(
-            coerce_quality_novelty_result(payload, novelty_input=novelty_input)
-        )
+        payload = id_to_response.get(rid)
+        if payload is None:
+            out.append(
+                _fallback_novelty_result(
+                    novelty_input,
+                    reason=(
+                        "Novelty LLM response did not include a valid result for this item; "
+                        "kept for review as PARTIALLY_NEW."
+                    ),
+                )
+            )
+            continue
+
+        out.append(coerce_quality_novelty_result(payload, novelty_input=novelty_input))
 
     return out
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,7 +13,7 @@ from neo4j import GraphDatabase, Driver
 from neo4j.exceptions import Neo4jError
 
 from kbdebugger.types import GraphRelation
-from .utils import predicate_to_dorian_relationship_type, rows_to_graph_relations
+from .utils import predicate_to_relationship_type, rows_to_graph_relations
 from .types import BatchUpsertSummary
 from .aura_api import ensure_aura_running_from_env 
 
@@ -146,13 +147,18 @@ class GraphStore:
     # ---------- high-level write API ----------
     def upsert_relation(self, relation: GraphRelation) -> list[dict[str, Any]]:
         """
-        Insert or update a single GraphRelation using Dorian-style Neo4j.
+        Insert or update a single GraphRelation using the standard graph schema.
 
         - Nodes are stored as `(:Node {name: ...})`
         - Predicates are stored as real relationship types, e.g. `:has_parameter`
-        - Provenance remains on the relationship as properties
-        - Dedupe is based on source node, target node, relationship type, and
-          the provenance `source` property when present
+        - Relationship `source` and `target` properties mirror the node names
+        - Caller-provided provenance `source` is preserved as `provenance_source`
+        - Structured provenance (doc name, quality, chunk) is APPENDED to
+          `rel.provenance_records` (JSON strings) and `rel.provenance_docs`
+          (doc names), never overwritten — so the same triple asserted by
+          multiple documents keeps every document's provenance
+        - Dedupe is based on source node, target node, and relationship type;
+          provenance entries dedupe on their exact JSON payload
         """
         src_name = str(relation["source"]["label"]).strip()
         tgt_name = str(relation["target"]["label"]).strip()
@@ -161,27 +167,51 @@ class GraphStore:
         if not src_name or not tgt_name:
             raise ValueError("GraphRelation source and target labels must be non-empty.")
 
-        rel_type = predicate_to_dorian_relationship_type(rel_label)
+        rel_type = predicate_to_relationship_type(rel_label)
 
         raw_props = relation["edge"].get("properties") or {}
+        provenance_source = str(raw_props.get("source", "")).strip() if isinstance(raw_props, dict) else ""
+        provenance = raw_props.get("provenance") if isinstance(raw_props, dict) else None
         props_all = {
             str(k): v
             for k, v in raw_props.items()
-            if v is not None and str(k) not in {"label", "type"}
+            if v is not None and str(k) not in {"label", "type", "source", "target", "provenance"}
         }
+        if provenance_source:
+            props_all.setdefault("provenance_source", provenance_source)
+
+        # Structured provenance record: stable JSON (no timestamp) so that
+        # re-submitting the same document stays idempotent via list membership.
+        prov_json = ""
+        prov_doc = ""
+        if isinstance(provenance, dict):
+            prov_doc = str(provenance.get("doc_name") or provenance_source or "").strip()
+            record = {
+                "doc": prov_doc,
+                "quality": str(provenance.get("quality") or "").strip(),
+                "chunk_index": provenance.get("chunk_index"),
+                "chunk_excerpt": str(provenance.get("chunk_excerpt") or "").strip(),
+            }
+            modality = str(provenance.get("modality") or "").strip().upper()
+            if modality:
+                record["modality"] = modality
+            prov_json = json.dumps(record, ensure_ascii=False, sort_keys=True)
+        elif provenance_source:
+            prov_doc = provenance_source
 
         now_iso = datetime.now(timezone.utc).isoformat()
-        rel_source_key = str(props_all.get("source", ""))
 
         on_create_props = {
             **props_all,
-            "source": rel_source_key,
+            "source": src_name,
+            "target": tgt_name,
             "created_at": now_iso,
             "last_updated_at": now_iso,
         }
         on_match_props = {
             **props_all,
-            "source": rel_source_key,
+            "source": src_name,
+            "target": tgt_name,
             "last_updated_at": now_iso,
         }
 
@@ -196,9 +226,21 @@ class GraphStore:
         SET t.last_updated_at = datetime(),
             t.created_at = coalesce(t.created_at, datetime())
 
-        MERGE (s)-[rel:`{rel_type}` {{source: $rel_source_key}}]->(t)
+        MERGE (s)-[rel:`{rel_type}` {{source: $source_name, target: $target_name}}]->(t)
         ON CREATE SET rel += $on_create
         ON MATCH SET rel += $on_match
+
+        WITH s, t, rel
+        SET rel.provenance_records = CASE
+                WHEN $prov_json = '' OR $prov_json IN coalesce(rel.provenance_records, [])
+                THEN coalesce(rel.provenance_records, [])
+                ELSE coalesce(rel.provenance_records, []) + $prov_json
+            END,
+            rel.provenance_docs = CASE
+                WHEN $prov_doc = '' OR $prov_doc IN coalesce(rel.provenance_docs, [])
+                THEN coalesce(rel.provenance_docs, [])
+                ELSE coalesce(rel.provenance_docs, []) + $prov_doc
+            END
 
         RETURN s, t, rel
         """
@@ -208,9 +250,10 @@ class GraphStore:
             params={
                 "source_name": src_name,
                 "target_name": tgt_name,
-                "rel_source_key": rel_source_key,
                 "on_create": on_create_props,
                 "on_match": on_match_props,
+                "prov_json": prov_json,
+                "prov_doc": prov_doc,
             },
         )
 
@@ -242,7 +285,7 @@ class GraphStore:
         Notes
         -----
         - This method performs no client-side deduplication.
-          Deduplication is handled inside `upsert_relation()` via Dorian-style
+          Deduplication is handled inside `upsert_relation()` via standard-schema
           typed relationship MERGE semantics.
         - If you later want "fail-fast" semantics, add a flag like `stop_on_error`.
         """

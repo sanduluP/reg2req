@@ -98,6 +98,8 @@ def run_pipeline(cfg: PipelineConfig) -> None:
             pdf_path=cfg.corpus_path,
             do_ocr=cfg.docling_enable_OCR,
             do_table_structure=cfg.docling_enable_table_recognition,
+            drop_reference_section=cfg.drop_reference_section,
+            reference_filter_mode=cfg.reference_section_filter_mode,
         )
 
     # Stage 2b: keyword extraction (KeyBERT gate) to find matching paragraphs to the user-chosen keyword

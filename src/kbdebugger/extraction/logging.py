@@ -10,6 +10,7 @@ def build_chunked_documents_payload(
     *,
     docs: Sequence[Document],
     created_at: str | None = None,
+    extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Build a clean, JSON-serializable payload for chunked paragraph Documents.
@@ -67,6 +68,8 @@ def build_chunked_documents_payload(
         "docs": cleaned_docs,
         "created_at": created_at,
     }
+    if extra_metadata:
+        payload.update(extra_metadata)
 
     return payload
 
@@ -75,6 +78,7 @@ def save_chunked_documents_json(
     *,
     docs: list[Document],
     source_kind: SourceKind,
+    extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Save chunked Documents to a clean JSON log for debugging/demo purposes.
@@ -91,7 +95,7 @@ def save_chunked_documents_json(
     dict[str, Any]
         The payload (useful if caller wants to reuse it without rebuilding).
     """
-    payload = build_chunked_documents_payload(docs=docs)
+    payload = build_chunked_documents_payload(docs=docs, extra_metadata=extra_metadata)
 
     # Keep compact time ONLY for filenames.
     created_at_compact = now_utc_compact()
