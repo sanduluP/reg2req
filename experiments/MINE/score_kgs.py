@@ -79,7 +79,8 @@ def _judge(judge: dspy.Module, fact: str, context: str) -> tuple[int, bool]:
 
 # --- graph loading ---------------------------------------------------------
 def _load_graph(system: str, record: dict, kgs_dir: str | None) -> Graph | None:
-    if system == "kbextractor":
+    # Systems we build ourselves load from a directory of kg_<id>.json files.
+    if system in ("kbextractor", "kggen_deepseek"):
         path = os.path.join(kgs_dir, f"kg_{record['id']}.json")
         if not os.path.exists(path):
             return None
@@ -115,7 +116,7 @@ def _load_cached_accuracy(out_dir: str, essay_id: Any) -> float | None:
 # --- main ------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--system", required=True, choices=["kbextractor", "kggen", "graphrag", "openie"])
+    parser.add_argument("--system", required=True, choices=["kbextractor", "kggen_deepseek", "kggen", "graphrag", "openie"])
     parser.add_argument("--data", default="experiments/MINE/data/mine.json")
     parser.add_argument("--kgs-dir", default=None, help="required for --system kbextractor")
     parser.add_argument("--out-dir", default="experiments/MINE/results")
@@ -139,8 +140,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.system == "kbextractor" and not args.kgs_dir:
-        parser.error("--kgs-dir is required for --system kbextractor")
+    if args.system in ("kbextractor", "kggen_deepseek") and not args.kgs_dir:
+        parser.error(f"--kgs-dir is required for --system {args.system}")
 
     with open(args.data, "r", encoding="utf-8") as handle:
         records = json.load(handle)

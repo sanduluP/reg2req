@@ -11,6 +11,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MINE_DIR="$REPO_ROOT/experiments/MINE"
 DATA_JSON="$MINE_DIR/data/mine.json"
 KGS_DIR="$MINE_DIR/kgs/kbextractor"
+KGGEN_KGS_DIR="$MINE_DIR/kgs/kggen_deepseek"
 RESULTS_DIR="$MINE_DIR/results"
 LOGS_DIR="$REPO_ROOT/logs/MINE"
 

@@ -37,6 +37,8 @@ echo "🧪 [MINE Stage 2] scoring system=$SYSTEM (judge=$MINE_JUDGE_MODEL)"
 args=(--system "$SYSTEM" --data "$DATA_JSON" --out-dir "$RESULTS_DIR")
 if [[ "$SYSTEM" == "kbextractor" ]]; then
   args+=(--kgs-dir "$KGS_DIR")
+elif [[ "$SYSTEM" == "kggen_deepseek" ]]; then
+  args+=(--kgs-dir "$KGGEN_KGS_DIR")
 fi
 # "$@" forwards any remaining flags to the Python script, e.g. --limit 1
 run_logged "score_${SYSTEM}" "$KGGEN_PY" "$MINE_DIR/score_kgs.py" "${args[@]}" "$@"
