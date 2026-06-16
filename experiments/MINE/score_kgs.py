@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from statistics import mean
 from typing import Any
@@ -53,11 +54,27 @@ def _configure_judge() -> None:
     dspy.configure(lm=dspy.LM(**kwargs))
 
 
-def _judge(judge: dspy.Module, fact: str, context: str) -> int:
-    try:
-        return int(judge(context=context, correct_answer=fact).evaluation)
-    except Exception:
-        return 0
+_JUDGE_MAX_RETRIES = 4
+
+
+def _judge(judge: dspy.Module, fact: str, context: str) -> tuple[int, bool]:
+    """Judge one (fact, context). Returns ``(score, failed)``.
+
+    ``failed=True`` means the judge *call itself* errored (e.g. the endpoint went
+    down) even after retries — which is distinct from a legitimate 0. The caller
+    uses this to refuse to cache a corrupted essay, so a transient outage doesn't
+    poison the results with spurious zeros that the idempotent cache would then
+    skip forever.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, _JUDGE_MAX_RETRIES + 1):
+        try:
+            return int(judge(context=context, correct_answer=fact).evaluation), False
+        except Exception as e:
+            last_err = e
+            time.sleep(min(2.0 * attempt, 10.0))
+    print(f"[judge] ❌ call failed after {_JUDGE_MAX_RETRIES} attempts: {last_err}")
+    return 0, True
 
 
 # --- graph loading ---------------------------------------------------------
@@ -179,13 +196,24 @@ def main() -> None:
         # Judge each (fact, context) — the LLM calls, optionally concurrent.
         if args.judge_workers > 1:
             with ThreadPoolExecutor(max_workers=args.judge_workers) as pool:
-                scores = list(pool.map(lambda fc: _judge(judge, fc[0], fc[1]), fact_contexts))
+                verdicts = list(pool.map(lambda fc: _judge(judge, fc[0], fc[1]), fact_contexts))
         else:
-            scores = [_judge(judge, fact, ctx) for fact, ctx in fact_contexts]
+            verdicts = [_judge(judge, fact, ctx) for fact, ctx in fact_contexts]
+
+        # If any judge call failed (e.g. endpoint outage), do NOT write/cache this
+        # essay — leave it unwritten so a later run re-judges it cleanly, instead
+        # of poisoning the cache with spurious 0s the idempotent skip would keep.
+        n_failed = sum(failed for _, failed in verdicts)
+        if n_failed:
+            print(
+                f"[{idx}/{len(records)}] ⚠️ id={essay_id}: {n_failed}/{len(facts)} judge "
+                f"calls failed — NOT caching (will be retried on the next run)"
+            )
+            continue
 
         per_fact = []
         correct = 0
-        for (fact, context_text), score in zip(fact_contexts, scores):
+        for (fact, context_text), (score, _failed) in zip(fact_contexts, verdicts):
             correct += score
             per_fact.append({"fact": fact, "retrieved_context": context_text, "evaluation": score})
 
