@@ -105,6 +105,11 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=8) # same as KGGen's default for retrieval
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
+        "--ids",
+        default=None,
+        help="comma-separated essay ids to score (e.g. 4,10,20). Targets specific essays — e.g. after a rebuild — instead of the first --limit records.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="re-judge essays even if results_<id>.json already exists (default: reuse cached results, no judge calls)",
@@ -122,7 +127,10 @@ def main() -> None:
 
     with open(args.data, "r", encoding="utf-8") as handle:
         records = json.load(handle)
-    if args.limit is not None:
+    if args.ids:
+        wanted = {int(x) for x in args.ids.split(",") if x.strip()}
+        records = [r for r in records if r["id"] in wanted]
+    elif args.limit is not None:
         records = records[: args.limit]
 
     _configure_judge()
