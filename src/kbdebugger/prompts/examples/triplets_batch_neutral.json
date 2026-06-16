@@ -1,0 +1,38 @@
+[
+  {
+    "sentence": "A Convolutional Neural Network is a subclass of a Deep Learning model.",
+    "triplets": [
+      ["Convolutional Neural Network", "Deep Learning model", "is a subclass of"]
+    ],
+    "skipped_reason": null
+  },
+  {
+    "sentence": "Butterflies feed on nectar and pollinate flowers.",
+    "triplets": [
+      ["butterfly", "nectar", "feeds on"],
+      ["butterfly", "flowers", "pollinates"]
+    ],
+    "skipped_reason": null
+  },
+  {
+    "sentence": "The Nile River flows through Egypt and empties into the Mediterranean Sea.",
+    "triplets": [
+      ["Nile River", "Egypt", "flows through"],
+      ["Nile River", "Mediterranean Sea", "empties into"]
+    ],
+    "skipped_reason": null
+  },
+  {
+    "sentence": "Water is composed of hydrogen and oxygen.",
+    "triplets": [
+      ["water", "hydrogen", "is composed of"],
+      ["water", "oxygen", "is composed of"]
+    ],
+    "skipped_reason": null
+  },
+  {
+    "sentence": "This is a truly fascinating and important topic worth exploring.",
+    "triplets": [],
+    "skipped_reason": "The sentence is motivational and states no concrete relationship."
+  }
+]

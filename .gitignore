@@ -47,6 +47,12 @@ ui/tmp/
 
 # .env File
 .env
+.env.*
 
 # Hugging Face
 runtime/
+
+# MINE experiment — generated artifacts (reproducible; keep out of git)
+experiments/MINE/kgs/
+experiments/MINE/results/
+experiments/MINE/data/
