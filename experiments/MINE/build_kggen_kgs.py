@@ -51,6 +51,14 @@ def main() -> None:
     parser.add_argument("--ids", default=None, help="comma-separated essay ids to build")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="sampling temperature (default 0.0, deterministic). Raise to recover essays "
+        "where greedy decoding emits schema-invalid (object-less) relations that KGGen "
+        "discards wholesale — at temp>0 the sampling differs and may produce valid triples.",
+    )
     args = parser.parse_args()
 
     with open(args.data, "r", encoding="utf-8") as handle:
@@ -62,8 +70,8 @@ def main() -> None:
         records = records[: args.limit]
 
     os.makedirs(args.out_dir, exist_ok=True)
-    kg = KGGen(model=args.model, api_base=args.api_base, api_key=args.api_key, temperature=0.0)
-    print(f"🧬 [KGGen Stage 1] model={args.model} api_base={args.api_base} → {args.out_dir}")
+    kg = KGGen(model=args.model, api_base=args.api_base, api_key=args.api_key, temperature=args.temperature)
+    print(f"🧬 [KGGen Stage 1] model={args.model} api_base={args.api_base} temp={args.temperature} → {args.out_dir}")
 
     built = skipped = failed = 0
     for idx, record in enumerate(records, start=1):
