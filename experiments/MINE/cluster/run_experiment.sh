@@ -38,6 +38,15 @@ echo "   host=$(hostname)  model=$SERVED_MODEL_NAME  port=$PORT  CUDA=${CUDA_VIS
 [ -x "$SCORER_ENV/bin/python" ] || { echo "❌ scorer env missing: $SCORER_ENV — run cluster/setup_envs.sh"; exit 1; }
 [ -d "$MODEL_DIR" ]          || { echo "❌ model dir not found: $MODEL_DIR"; exit 1; }
 
+# Fail fast if there's no GPU (e.g. accidentally run on the login node) — otherwise
+# vLLM dies later with a cryptic "Failed to infer device type".
+if ! nvidia-smi -L >/dev/null 2>&1; then
+  echo "❌ no GPU visible on $(hostname). Run this INSIDE a GPU Slurm job, not directly:"
+  echo "   BEGIN=now bash cluster/srun_submit.sh all mine_judge 8 1 80G 6 cluster/run_experiment.sh"
+  exit 1
+fi
+echo "🎮 GPU(s): $(nvidia-smi -L | paste -sd';' -)"
+
 # vLLM's own (noisy) stdout goes to a SEPARATE sub-log so the master job log stays
 # readable; this script's narrative is captured by the master log (srun redirect).
 VLLM_LOG="$(log_path vllm)"
