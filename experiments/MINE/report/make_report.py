@@ -40,6 +40,16 @@ STEP = 100.0 / N_FACTS
 
 DEEPSEEK_SLUG = "openai-deepseek-r1-32b"
 GPT5_SLUG = "openai-gpt-5"
+QWEN3_SLUG = "openai-Qwen-Qwen3-30B-A3B-Instruct-2507-FP8"
+PRIMARY_SLUG = DEEPSEEK_SLUG                       # drives Tables 1/3 + figs 1/3
+JUDGE_ORDER = [DEEPSEEK_SLUG, GPT5_SLUG, QWEN3_SLUG]  # preferred display order; others appended
+
+# Friendly labels + one-line details for whichever judges are present on disk.
+JUDGE_LABELS = {
+    DEEPSEEK_SLUG: "deepseek-r1:32b",
+    GPT5_SLUG: "GPT-5 (high)",
+    QWEN3_SLUG: "Qwen3-30B-Instruct",
+}
 
 # Colour-blind-safe (Okabe-Ito). KBExtractor = blue ("ours"), KGGen = orange.
 C_KB = "#0072B2"
@@ -49,9 +59,16 @@ C_G5 = "#CC79A7"
 
 # Transparency strings reused in captions + on-figure info boxes.
 EXTRACTION_CORE = "deepseek-r1:32b (DeepSeek-R1 distilled Qwen-32B, 32B params, temp 0)"
-JUDGE_DEEPSEEK = "deepseek-r1:32b (32B params, on-prem vLLM, temp 0, CoT)"
+JUDGE_DEEPSEEK = "deepseek-r1:32b (32B params, on-prem Ollama, temp 0, CoT)"
 JUDGE_GPT5 = "GPT-5 (OpenAI, reasoning_effort=high, temp 1.0) — exact KGGen-paper parity"
 RETRIEVER = "all-MiniLM-L6-v2 (22.7M params), top-k=8 nearest nodes + 2-hop expansion"
+
+# One-line details for Table 3 (per judge slug); falls back to the label.
+JUDGE_DETAILS = {
+    DEEPSEEK_SLUG: JUDGE_DEEPSEEK,
+    GPT5_SLUG: JUDGE_GPT5,
+    QWEN3_SLUG: "Qwen3-30B-A3B-Instruct-2507 (FP8, served via vLLM on a DFKI GPU) — open-source robustness check",
+}
 
 
 # --- data loading ----------------------------------------------------------
@@ -85,17 +102,43 @@ def stat_block(vals: list[float]) -> dict[str, float]:
     }
 
 
-# Load every (system, judge) combo we have.
-kb_ds = load("kbextractor", DEEPSEEK_SLUG)       # 100
-kg_ds = load("kggen_deepseek", DEEPSEEK_SLUG)    # 98
-kb_g5 = load("kbextractor", GPT5_SLUG)           # 10
-kg_g5 = load("kggen_deepseek", GPT5_SLUG)        # 10
+# --- judge discovery (add a judge by just dropping results/<system>/<slug>/) ---
+def _prettify_judge(slug: str) -> str:
+    return JUDGE_LABELS.get(slug, slug.replace("openai-", "").replace("-", " "))
 
+
+def discover_judge_stats() -> list[dict]:
+    """Every judge that scored BOTH systems → its per-judge means over the essays it
+    scored for both. Adding a new judge dir needs no code change — it just appears."""
+    def slugs(system: str) -> set[str]:
+        d = os.path.join(RESULTS_DIR, system)
+        return {x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))} if os.path.isdir(d) else set()
+
+    both = slugs("kbextractor") & slugs("kggen_deepseek")
+    ordered = [s for s in JUDGE_ORDER if s in both] + sorted(s for s in both if s not in JUDGE_ORDER)
+    out: list[dict] = []
+    for slug in ordered:
+        kb, kg = load("kbextractor", slug), load("kggen_deepseek", slug)
+        ids = sorted(set(kb) & set(kg))
+        if not ids:
+            continue
+        kb_v, kg_v = [kb[i] for i in ids], [kg[i] for i in ids]
+        out.append({
+            "slug": slug, "label": _prettify_judge(slug), "n": len(ids),
+            "kb_mean": mean(kb_v), "kg_mean": mean(kg_v),
+            "kb_sem": stats.sem(kb_v) if len(kb_v) > 1 else 0.0,
+            "kg_sem": stats.sem(kg_v) if len(kg_v) > 1 else 0.0,
+        })
+    return out
+
+
+# Primary judge (deepseek) drives Tables 1/3 + figs 1/3; ALL judges drive the ablation.
+kb_ds = load("kbextractor", PRIMARY_SLUG)
+kg_ds = load("kggen_deepseek", PRIMARY_SLUG)
 common = sorted(set(kb_ds) & set(kg_ds))         # essays both systems built (100)
-sub10 = sorted(set(kb_g5) & set(kg_g5))          # GPT-5 ablation subset (10)
-
 S_kb_full = stat_block(list(kb_ds.values()))
 S_kg_full = stat_block(list(kg_ds.values()))
+JUDGES = discover_judge_stats()
 
 
 # --- Figure 1: MINE-1 distribution (Figure-3 analog) -----------------------
@@ -143,40 +186,40 @@ def fig1() -> None:
     _save(fig, "fig1_mine1_distribution")
 
 
-# --- Figure 2: judge-LLM ablation (matched 10) -----------------------------
+# --- Figure 2: judge-LLM ablation (auto over every discovered judge) --------
 def fig2() -> None:
-    systems = ["KBExtractor (ours)", "KGGen"]
-    kb_vals_ds = [kb_ds[i] for i in sub10]
-    kg_vals_ds = [kg_ds[i] for i in sub10]
-    kb_vals_g5 = [kb_g5[i] for i in sub10]
-    kg_vals_g5 = [kg_g5[i] for i in sub10]
-    ds_means = [mean(kb_vals_ds), mean(kg_vals_ds)]
-    g5_means = [mean(kb_vals_g5), mean(kg_vals_g5)]
-    ds_sem = [stats.sem(kb_vals_ds), stats.sem(kg_vals_ds)]
-    g5_sem = [stats.sem(kb_vals_g5), stats.sem(kg_vals_g5)]
+    if not JUDGES:
+        print("… skipping fig2 (no judges discovered)"); return
+    x = np.arange(len(JUDGES))
+    w = 0.38
+    fig, ax = plt.subplots(figsize=(max(7.0, 1.9 * len(JUDGES) + 3.0), 5.0), constrained_layout=True)
+    b_kb = ax.bar(x - w / 2, [j["kb_mean"] for j in JUDGES], w, yerr=[j["kb_sem"] for j in JUDGES],
+                  capsize=4, color=C_KB, alpha=0.9, label="KBExtractor (ours)")
+    b_kg = ax.bar(x + w / 2, [j["kg_mean"] for j in JUDGES], w, yerr=[j["kg_sem"] for j in JUDGES],
+                  capsize=4, color=C_KG, alpha=0.9, label="KGGen")
+    for bars in (b_kb, b_kg):
+        ax.bar_label(bars, fmt="%.1f%%", padding=3, fontsize=9, fontweight="bold")
 
-    x = np.arange(2)
-    w = 0.36
-    fig, ax = plt.subplots(figsize=(7.0, 5.0), constrained_layout=True)
-    b1 = ax.bar(x - w / 2, ds_means, w, yerr=ds_sem, capsize=4, color=C_DS, alpha=0.9,
-                label="Judge: deepseek-r1:32b (n=10)")
-    b2 = ax.bar(x + w / 2, g5_means, w, yerr=g5_sem, capsize=4, color=C_G5, alpha=0.9,
-                label="Judge: GPT-5, effort=high (n=10)")
-    for bars in (b1, b2):
-        ax.bar_label(bars, fmt="%.1f%%", padding=3, fontsize=9.5, fontweight="bold")
+    # Gap (KB − KGGen) above each judge group (dynamic, clear of the bar labels).
+    for xi, j in zip(x, JUDGES):
+        ax.annotate(f"Δ +{j['kb_mean'] - j['kg_mean']:.1f}",
+                    xy=(xi, max(j["kb_mean"], j["kg_mean"])), xytext=(0, 16),
+                    textcoords="offset points", ha="center", fontsize=9,
+                    fontweight="bold", color="#333333")
 
-    ax.set_xticks(x, systems, fontsize=11)
+    ax.set_xticks(x, [f"{j['label']}\n(n={j['n']})" for j in JUDGES], fontsize=10.5)
     ax.set_ylabel("MINE-1  (mean facts captured, %)", fontsize=12)
-    ax.set_ylim(0, 100)
-    ax.set_title("Judge-LLM ablation on a matched 10-article subset\n"
-                 "the KBExtractor > KGGen ranking is robust to the judge", fontsize=12.5,
-                 fontweight="bold")
-    ax.legend(loc="upper right", fontsize=9.5, framealpha=0.9)
+    ax.set_ylim(0, 116)
+    ax.set_title("Judge-LLM ablation — KBExtractor > KGGen under every judge",
+                 fontsize=12.5, fontweight="bold", pad=30)
+    # Legend above the axes so it never collides with the bars / gap labels.
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.005), ncol=2, fontsize=9.5, frameon=False)
     ax.grid(axis="y", alpha=0.25)
-    ax.text(0.015, 0.02,
-            "GPT-5 limited to 10 articles (inference cost ≈ $0.17/article;\n"
-            "full 198-article run ≈ $33.6). Same articles, retriever, and metric across judges.",
-            transform=ax.transAxes, ha="left", va="bottom", fontsize=7.6, family="monospace",
+    ax.text(0.5, -0.13,
+            "Each judge scores identical graphs (same retriever + metric); bars are over that "
+            "judge's own article set (n).\nGPT-5 capped at 10 articles for cost (≈ $0.17/article). "
+            "Absolute level varies with judge strictness; the gap persists.",
+            transform=ax.transAxes, ha="center", va="top", fontsize=7.3, family="monospace",
             bbox=dict(boxstyle="round,pad=0.4", fc="#f5f5f5", ec="#bbbbbb"))
     _save(fig, "fig2_judge_ablation")
 
@@ -223,11 +266,34 @@ def _save(fig, name: str) -> None:
 
 # --- RESULTS.md tables + captions ------------------------------------------
 def write_markdown() -> None:
-    kb_sub_ds = [kb_ds[i] for i in sub10]
-    kg_sub_ds = [kg_ds[i] for i in sub10]
-    kb_sub_g5 = [kb_g5[i] for i in sub10]
-    kg_sub_g5 = [kg_g5[i] for i in sub10]
-    m = lambda v: f"{mean(v):.2f}"
+    # Table 2 — built dynamically so every discovered judge becomes a column.
+    t2_header = "| System |" + "".join(f" Judge: {j['label']} (n={j['n']}) |" for j in JUDGES)
+    t2_align = "|---" + "|---:" * len(JUDGES) + "|"
+    t2_kb = "| **KBExtractor (ours)** " + "".join(f"| {j['kb_mean']:.2f}% " for j in JUDGES) + "|"
+    t2_kg = "| KGGen " + "".join(f"| {j['kg_mean']:.2f}% " for j in JUDGES) + "|"
+    t2_gap = "| **Gap (KB − KGGen)** " + "".join(f"| **+{j['kb_mean'] - j['kg_mean']:.2f}** " for j in JUDGES) + "|"
+    t2_table = "\n".join([t2_header, t2_align, t2_kb, t2_kg, t2_gap])
+
+    judge_names = ", ".join(j["label"] for j in JUDGES) or "—"
+    n_full = S_kb_full["n"] + S_kg_full["n"]
+    g5 = next((j for j in JUDGES if j["slug"] == GPT5_SLUG), None)
+    gpt5_note = matched_note = ""
+    if g5:
+        gpt5_note = (
+            f" GPT-5 (`reasoning_effort=high`, the KGGen-paper's own judge in `_1_evaluation.py`) is "
+            f"capped at {g5['n']} articles — the full two-system run (~{n_full} judgements) would cost "
+            f"≈ ${n_full * 0.17:.0f} at ≈ $0.17/article.")
+        # Matched cross-check: deepseek on the SAME articles GPT-5 judged.
+        g5_ids = sorted(set(load("kbextractor", GPT5_SLUG)) & set(load("kggen_deepseek", GPT5_SLUG)))
+        if g5_ids:
+            kb_m = mean([kb_ds[i] for i in g5_ids if i in kb_ds])
+            kg_m = mean([kg_ds[i] for i in g5_ids if i in kg_ds])
+            matched_note = (
+                f" Head-to-head on those same {len(g5_ids)} articles the primary judge scores "
+                f"KBExtractor {kb_m:.1f}% / KGGen {kg_m:.1f}%, so GPT-5 ({g5['kb_mean']:.1f} / "
+                f"{g5['kg_mean']:.1f}) agrees on the ranking on identical essays.")
+    ablation_judges = "; ".join(
+        JUDGE_DETAILS.get(j["slug"], j["label"]) for j in JUDGES if j["slug"] != PRIMARY_SLUG) or "—"
 
     md = f"""# MINE-1 Results — KBExtractor vs KGGen
 
@@ -266,21 +332,15 @@ all other graphs use temperature 0.
 
 ---
 
-## Table 2 — Judge-LLM ablation (matched 10-article subset)
+## Table 2 — Judge-LLM ablation (robustness across judges)
 
-| System | Judge: deepseek-r1:32b | Judge: GPT-5 (effort=high) |
-|---|---:|---:|
-| **KBExtractor (ours)** | {m(kb_sub_ds)}% | **{m(kb_sub_g5)}%** |
-| KGGen | {m(kg_sub_ds)}% | {m(kg_sub_g5)}% |
-| **Gap (KB − KGGen)** | **+{mean(kb_sub_ds) - mean(kg_sub_ds):.2f}** | **+{mean(kb_sub_g5) - mean(kg_sub_g5):.2f}** |
+{t2_table}
 
-**Table 2.** Judge-LLM ablation on a fixed 10-article subset (ids 0–9). The KGGen-paper's
-own judge is **GPT-5, `reasoning_effort=high`, temperature 1.0** (`_1_evaluation.py`); we
-reproduce it exactly and contrast it with our zero-cost on-prem `deepseek-r1:32b` judge on
-identical graphs. Both judges rank **KBExtractor above KGGen**; GPT-5 yields an *even wider*
-margin (+{mean(kb_sub_g5) - mean(kg_sub_g5):.1f} vs +{mean(kb_sub_ds) - mean(kg_sub_ds):.1f} pt),
-confirming the deepseek-judged headline is not inflated. GPT-5 is limited to 10 articles
-because of inference cost (≈ $0.17/article; the full 198-article, two-system run ≈ $33.6).
+**Table 2.** Judge-LLM ablation: {judge_names} each score both systems on identical graphs
+(each judge over its own article set, n in the header). **All judges rank KBExtractor above
+KGGen** — the ranking is robust to the choice of judge. Absolute levels shift with judge
+strictness (a more lenient judge lifts both systems), but the KBExtractor−KGGen gap persists
+under every judge.{matched_note}{gpt5_note}
 
 ---
 
@@ -292,7 +352,7 @@ because of inference cost (≈ $0.17/article; the full 198-article, two-system r
 | Extraction core (both systems) | {EXTRACTION_CORE} |
 | Retriever | {RETRIEVER} |
 | Primary judge | {JUDGE_DEEPSEEK} |
-| Ablation judge | {JUDGE_GPT5} |
+| Ablation judge(s) | {ablation_judges} |
 | KGGen temperature note | 98/100 graphs at temp 0; ids 47, 57 needed temp 0.5 — at temp 0 deepseek deterministically emitted object-less relations that KGGen's all-or-nothing `list[Relation]` parse discarded wholesale. KBExtractor built all 100 at temp 0. |
 
 **Table 3.** Experimental configuration. Every component except the extraction *method* is
@@ -306,8 +366,8 @@ the backbone LLM, the retriever, or the judge.
 - **Figure 1** (`fig1_mine1_distribution`): per-article MINE-1 distributions with fitted
   normals and mean lines (deepseek judge, full set). KBExtractor's mass sits well to the
   right of KGGen's.
-- **Figure 2** (`fig2_judge_ablation`): deepseek vs GPT-5 judge on the matched 10-article
-  subset — the ranking holds under both judges.
+- **Figure 2** (`fig2_judge_ablation`): per-judge MINE-1 for both systems ({judge_names}) —
+  KBExtractor leads under every judge.
 - **Figure 3** (`fig3_paired_scatter`): per-article paired KBExtractor-vs-KGGen scatter
   (deepseek judge, all 100 articles); points above the diagonal are KBExtractor wins.
 """
@@ -318,8 +378,9 @@ the backbone LLM, the retriever, or the judge.
 
 
 if __name__ == "__main__":
-    print(f"loaded: kb_ds={len(kb_ds)} kg_ds={len(kg_ds)} kb_g5={len(kb_g5)} kg_g5={len(kg_g5)} "
-          f"| common={len(common)} sub10={len(sub10)}")
+    print(f"primary judge: kb={len(kb_ds)} kg={len(kg_ds)} common={len(common)}")
+    print("judges discovered for ablation: " +
+          ", ".join(f"{j['label']}(n={j['n']})" for j in JUDGES))
     fig1()
     fig2()
     fig3()

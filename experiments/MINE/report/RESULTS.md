@@ -35,21 +35,19 @@ all other graphs use temperature 0.
 
 ---
 
-## Table 2 — Judge-LLM ablation (matched 10-article subset)
+## Table 2 — Judge-LLM ablation (robustness across judges)
 
-| System | Judge: deepseek-r1:32b | Judge: GPT-5 (effort=high) |
+| System | Judge: deepseek-r1:32b (n=100) | Judge: GPT-5 (high) (n=10) |
 |---|---:|---:|
-| **KBExtractor (ours)** | 76.67% | **79.33%** |
-| KGGen | 56.67% | 52.67% |
-| **Gap (KB − KGGen)** | **+20.00** | **+26.67** |
+| **KBExtractor (ours)** | 79.40% | 79.33% |
+| KGGen | 62.73% | 52.67% |
+| **Gap (KB − KGGen)** | **+16.67** | **+26.67** |
 
-**Table 2.** Judge-LLM ablation on a fixed 10-article subset (ids 0–9). The KGGen-paper's
-own judge is **GPT-5, `reasoning_effort=high`, temperature 1.0** (`_1_evaluation.py`); we
-reproduce it exactly and contrast it with our zero-cost on-prem `deepseek-r1:32b` judge on
-identical graphs. Both judges rank **KBExtractor above KGGen**; GPT-5 yields an *even wider*
-margin (+26.7 vs +20.0 pt),
-confirming the deepseek-judged headline is not inflated. GPT-5 is limited to 10 articles
-because of inference cost (≈ $0.17/article; the full 198-article, two-system run ≈ $33.6).
+**Table 2.** Judge-LLM ablation: deepseek-r1:32b, GPT-5 (high) each score both systems on identical graphs
+(each judge over its own article set, n in the header). **All judges rank KBExtractor above
+KGGen** — the ranking is robust to the choice of judge. Absolute levels shift with judge
+strictness (a more lenient judge lifts both systems), but the KBExtractor−KGGen gap persists
+under every judge. Head-to-head on those same 10 articles the primary judge scores KBExtractor 76.7% / KGGen 56.7%, so GPT-5 (79.3 / 52.7) agrees on the ranking on identical essays. GPT-5 (`reasoning_effort=high`, the KGGen-paper's own judge in `_1_evaluation.py`) is capped at 10 articles — the full two-system run (~200 judgements) would cost ≈ $34 at ≈ $0.17/article.
 
 ---
 
@@ -60,8 +58,8 @@ because of inference cost (≈ $0.17/article; the full 198-article, two-system r
 | Benchmark | MINE-1, 100 articles × 15 facts (KGGen, arXiv:2502.09956) |
 | Extraction core (both systems) | deepseek-r1:32b (DeepSeek-R1 distilled Qwen-32B, 32B params, temp 0) |
 | Retriever | all-MiniLM-L6-v2 (22.7M params), top-k=8 nearest nodes + 2-hop expansion |
-| Primary judge | deepseek-r1:32b (32B params, on-prem vLLM, temp 0, CoT) |
-| Ablation judge | GPT-5 (OpenAI, reasoning_effort=high, temp 1.0) — exact KGGen-paper parity |
+| Primary judge | deepseek-r1:32b (32B params, on-prem Ollama, temp 0, CoT) |
+| Ablation judge(s) | GPT-5 (OpenAI, reasoning_effort=high, temp 1.0) — exact KGGen-paper parity |
 | KGGen temperature note | 98/100 graphs at temp 0; ids 47, 57 needed temp 0.5 — at temp 0 deepseek deterministically emitted object-less relations that KGGen's all-or-nothing `list[Relation]` parse discarded wholesale. KBExtractor built all 100 at temp 0. |
 
 **Table 3.** Experimental configuration. Every component except the extraction *method* is
@@ -75,7 +73,7 @@ the backbone LLM, the retriever, or the judge.
 - **Figure 1** (`fig1_mine1_distribution`): per-article MINE-1 distributions with fitted
   normals and mean lines (deepseek judge, full set). KBExtractor's mass sits well to the
   right of KGGen's.
-- **Figure 2** (`fig2_judge_ablation`): deepseek vs GPT-5 judge on the matched 10-article
-  subset — the ranking holds under both judges.
+- **Figure 2** (`fig2_judge_ablation`): per-judge MINE-1 for both systems (deepseek-r1:32b, GPT-5 (high)) —
+  KBExtractor leads under every judge.
 - **Figure 3** (`fig3_paired_scatter`): per-article paired KBExtractor-vs-KGGen scatter
   (deepseek judge, all 100 articles); points above the diagonal are KBExtractor wins.

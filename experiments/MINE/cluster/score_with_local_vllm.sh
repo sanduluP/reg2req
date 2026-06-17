@@ -49,7 +49,9 @@ echo "📄 log → $LOG"
 {
   for sysname in "${SYSTEMS[@]}"; do
     echo "════════ scoring $sysname ════════"
-    "$PY" "$ROOT/score_kgs.py" --system "$sysname" \
+    # -u = unbuffered, so per-essay "✓ id=" lines stream into the log live
+    # (otherwise Python block-buffers stdout through the pipe and they appear in chunks).
+    "$PY" -u "$ROOT/score_kgs.py" --system "$sysname" \
         --kgs-dir "$ROOT/kgs/$sysname" \
         --data "$ROOT/data/mine.json" \
         --out-dir "$ROOT/results" \
