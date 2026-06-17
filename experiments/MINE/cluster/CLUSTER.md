@@ -20,18 +20,20 @@ One self-contained job serves the judge **and** scores, so it survives without a
 interactive shell. `BEGIN=` holds it PENDING until a quiet hour. Launch inside
 `tmux`/`screen` on the login node so the nohup'd srun client survives logout.
 
-```bash
-# 0. (LOCAL) push the scorer + dataset + pre-built KGs to the cluster mirror.
-bash experiments/MINE/cluster/sync_to_cluster.sh        # → /home/abuali/projects/kbextractor-mine
+All knobs are hardcoded — you don't pass arguments. `run_experiment.sh` serves +
+scores + frees the GPU; `submit_overnight.sh` queues it (partition/time/BEGIN
+hardcoded inside).
 
-# 1. (CLUSTER, in tmux) submit a deferred job: serve Qwen3 + judge both systems,
-#    starting at midnight, on H100, max 6h. (8 cpus, 1 gpu, 80G.)
+```bash
+# 0. (LOCAL) sync the MINE bundle + the BEGIN= update in kggen-eval.
+bash experiments/MINE/cluster/sync_to_cluster.sh                        # → kbextractor-mine
+( cd /home/faris/code/DSA_HiWi/kggen-eval && bash scripts/sync_to_cluster.sh )
+
+# 1. (CLUSTER, in tmux) ONE command — queues the whole run for midnight on H100.
 tmux new -s mine
-cd /home/abuali/projects/kbextractor-mine
-BEGIN=00:00 bash /home/abuali/projects/kggen-eval/scripts/srun_submit.sh \
-    H100 mine_judge 8 1 80G 6 cluster/serve_and_score.sh
-#   watch:  squeue -u abuali        (PD = waiting for the begin time / a free H100)
-#           tail -f /fscratch/abuali/logs/mine_judge_*.log
+bash /home/abuali/projects/kbextractor-mine/cluster/submit_overnight.sh
+#   detach: Ctrl-b d   ·   watch: squeue -u abuali  (PD until 00:00 / a free H100)
+#                                  tail -f /fscratch/abuali/logs/mine_judge_*.log
 
 # 2. (LOCAL, next morning) pull results back, extend the report to a 3-judge ablation.
 scp -r abuali@login1.pegasus.kl.dfki.de:/home/abuali/projects/kbextractor-mine/results/* \
@@ -39,37 +41,38 @@ scp -r abuali@login1.pegasus.kl.dfki.de:/home/abuali/projects/kbextractor-mine/r
 experiments/MINE/report/.venv/bin/python experiments/MINE/report/make_report.py
 ```
 
+Run it **now** instead of midnight: `BEGIN=now bash cluster/submit_overnight.sh`.
+Smoke-test first: temporarily set `SCORE_ARGS="--limit 3"` in `score_with_local_vllm.sh`.
+
 ## Workflow B — interactive (if you happen to get a node fast)
 
 ```bash
 bash experiments/MINE/cluster/sync_to_cluster.sh                  # LOCAL
 cd /home/abuali/projects/kggen-eval                               # CLUSTER
 bash scripts/slurm_pty.sh H100 mine_judge 1 1 1 8 80G 4           # interactive H100
-bash scripts/serve_vllm.sh                                        # serve Qwen3, waits READY
 cd /home/abuali/projects/kbextractor-mine
-bash cluster/score_with_local_vllm.sh                             # judge both systems
+bash cluster/run_experiment.sh                                   # serve + score + stop, all-in-one
 #   → results/{kbextractor,kggen_deepseek}/openai-Qwen-Qwen3-30B-.../
 ```
 
 ## Notes
 
-- **Served-model-name must match.** `score_with_local_vllm.sh` defaults its judge
-  id to `openai/Qwen/Qwen3-30B-A3B-Instruct-2507-FP8`, which equals the
-  `--served-model-name` in `serve_vllm.sh`. If you serve a different model, set
-  `MINE_JUDGE_MODEL=openai/<served-name>` before step 3.
+- **The knobs live in two files.** Which LLM to serve → `run_experiment.sh`
+  (`MODEL_DIR`/`SERVED_MODEL_NAME`/`PORT`). Which SLURM slot → `submit_overnight.sh`
+  (`PARTITION`/`MEM`/`HOURS`/`BEGIN`). The judge id is derived as
+  `openai/<SERVED_MODEL_NAME>`, so the scorer always matches what's served.
 - **The `openai/` prefix** is just litellm's OpenAI wire format — it routes to
   `/v1/chat/completions`, which vLLM serves. (Nothing to do with OpenAI the vendor.)
-- **Idempotent.** Re-running skips essays already judged by this judge; add
-  `--overwrite` to force, `--ids 4,10` to target specific essays. Args after the
-  task script flow through: `… cluster/serve_and_score.sh --limit 5` for a smoke test.
-- **Don't submit `serve_vllm.sh` directly to `srun_submit`.** It backgrounds vLLM
-  and returns, so the job would end (and kill vLLM) before scoring. `serve_and_score.sh`
-  exists precisely to keep one job alive across serve **and** score.
-- **`BEGIN=` accepts** `HH:MM`, `now+4hours`, or `2026-06-18T02:00:00`; the job sits
-  `PD` in `squeue` until then. Run it from `tmux`/`screen` so the nohup'd srun client
-  outlives your SSH session.
+- **Idempotent.** Re-running skips essays already judged by this judge; for a
+  forced re-judge or a smoke test, edit `SCORE_ARGS` in `score_with_local_vllm.sh`
+  (`--overwrite`, `--ids 4,10`, `--limit 3`).
+- **Why `run_experiment.sh` and not `serve_vllm.sh` as the task.** A submitted
+  task that just serves would background vLLM and *return*, ending the job (and
+  killing vLLM) before scoring. `run_experiment.sh` keeps one job alive across
+  serve **and** score, then frees the GPU on exit.
+- **`BEGIN=` accepts** `HH:MM`, `now`, `now+4hours`, or `2026-06-18T02:00:00`; the
+  job sits `PD` in `squeue` until then. Run from `tmux`/`screen` so the nohup'd
+  srun client outlives your SSH session.
 - **Adding gpt-oss-20b later** (judge #4): download it to `/fscratch/abuali/models`,
-  then reuse the same job with overrides —
-  `MODEL_DIR=/fscratch/abuali/models/gpt-oss-20b SERVED_MODEL_NAME=gpt-oss-20b
-  BEGIN=00:00 bash …/kggen-eval/scripts/srun_submit.sh H100 mine_gptoss 8 1 80G 6 cluster/serve_and_score.sh`.
-  Target H100 (native MXFP4, ~16 GB).
+  then just point the two `MODEL_DIR`/`SERVED_MODEL_NAME` lines in `run_experiment.sh`
+  at it (and bump `JOB_NAME` in `submit_overnight.sh`). Target H100 (native MXFP4, ~16 GB).

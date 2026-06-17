@@ -8,18 +8,26 @@
 # ./results/<system>/<judge-slug>/ — scp that back and feed it to make_report.py
 # for a 3rd-judge ablation column.
 #
-# Defaults target the Qwen3-30B judge that serve_vllm.sh already serves; override
-# any of these via env:
+# Usually invoked by run_experiment.sh (which exports MINE_JUDGE_MODEL/_API_BASE
+# after the server is up), but also runnable standalone against an already-serving
+# judge. The SCORER knobs live here; the model-to-serve knobs live in
+# run_experiment.sh. Anything overridable via env:
 #   MINE_JUDGE_MODEL   served-model-name, openai/-prefixed (litellm wire format)
 #   VLLM_PORT          vLLM port (default 8000)
 #   JUDGE_WORKERS      concurrent judge calls (vLLM batches — 16 is comfortable)
+#   SCORE_ARGS         extra score_kgs.py flags (e.g. "--limit 3", "--overwrite")
 #   KGGEN_VENV         path to the venv with kg_gen + dspy
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
 PY="${KGGEN_VENV:-/fscratch/abuali/venvs/kggen-eval}/bin/python"
 PORT="${VLLM_PORT:-8000}"
-WORKERS="${JUDGE_WORKERS:-16}"
+
+# ─────────────── EDIT THESE — the scorer knobs ───────────────
+WORKERS="${JUDGE_WORKERS:-16}"     # concurrent judge calls
+SYSTEMS=(kbextractor kggen_deepseek)
+SCORE_ARGS="${SCORE_ARGS:-}"       # e.g. "--limit 3" smoke test · "--overwrite" · "--ids 4,10"
+# ─────────────────────────────────────────────────────────────
 
 export MINE_JUDGE_MODEL="${MINE_JUDGE_MODEL:-openai/Qwen/Qwen3-30B-A3B-Instruct-2507-FP8}"
 export MINE_JUDGE_API_BASE="${MINE_JUDGE_API_BASE:-http://localhost:${PORT}/v1}"
@@ -39,13 +47,13 @@ echo "🧪 judge=$MINE_JUDGE_MODEL  api_base=$MINE_JUDGE_API_BASE  workers=$WORK
 echo "📄 log → $LOG"
 
 {
-  for sysname in kbextractor kggen_deepseek; do
+  for sysname in "${SYSTEMS[@]}"; do
     echo "════════ scoring $sysname ════════"
     "$PY" "$ROOT/score_kgs.py" --system "$sysname" \
         --kgs-dir "$ROOT/kgs/$sysname" \
         --data "$ROOT/data/mine.json" \
         --out-dir "$ROOT/results" \
-        --judge-workers "$WORKERS" "$@"
+        --judge-workers "$WORKERS" $SCORE_ARGS "$@"
   done
 } 2>&1 | tee "$LOG"
 
