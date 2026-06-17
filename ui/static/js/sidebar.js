@@ -186,11 +186,11 @@ function sentenceCallout(sentence) {
   `;
 }
 
-function debugAccordion(idSuffix, jsonObj) {
+function metadataAccordion(idSuffix, jsonObj) {
   const jsonText = JSON.stringify(jsonObj ?? {}, null, 2);
-  const accId = `debug-acc-${idSuffix}`;
-  const headingId = `debug-heading-${idSuffix}`;
-  const collapseId = `debug-collapse-${idSuffix}`;
+  const accId = `meta-acc-${idSuffix}`;
+  const headingId = `meta-heading-${idSuffix}`;
+  const collapseId = `meta-collapse-${idSuffix}`;
 
   return `
     <div class="accordion mt-3" id="${accId}">
@@ -199,7 +199,7 @@ function debugAccordion(idSuffix, jsonObj) {
           <button class="accordion-button collapsed py-2" type="button"
                   data-bs-toggle="collapse" data-bs-target="#${collapseId}"
                   aria-expanded="false" aria-controls="${collapseId}">
-            <i class="bi bi-bug me-1"></i>Debug details
+            <i class="bi bi-list-columns me-1"></i>Relationship metadata
           </button>
         </h2>
         <div id="${collapseId}" class="accordion-collapse collapse"
@@ -252,7 +252,7 @@ export function renderEmptyDetails(container) {
 }
 
 
-export function renderEdgeDetails(container, edgeData) {
+export function renderEdgeDetails(container, edgeData, endpoints = {}) {
   showSidebar();
   setDetailsTitle("Relationship details");
   const props = edgeData?.properties || {};
@@ -260,9 +260,15 @@ export function renderEdgeDetails(container, edgeData) {
   const relationLabel = edgeData?.label || props?.label || "relation";
   const relationDisplayLabel = formatPredicateLabel(relationLabel);
   const sentence = props.sentence || "";
-  const source = props.source || "";
   const createdAt = props.created_at || null;
   const updatedAt = props.last_updated_at || null;
+
+  // Source/target node names come from the graph topology (the relationship
+  // endpoints), not from stored redundant properties. They are shown only in
+  // the metadata view, never as a prominent parent row.
+  const sourceName = endpoints.source || props.source || "";
+  const targetName = endpoints.target || props.target || "";
+  const metadata = { source: sourceName, target: targetName, ...props };
 
   container.innerHTML = `
     <div class="mb-2">
@@ -271,12 +277,6 @@ export function renderEdgeDetails(container, edgeData) {
 
     ${sentenceCallout(sentence)}
 
-    
-    ${infoRow({
-    icon: "bi-file-earmark-text",
-    label: "Source",
-    value: source
-  })}
     ${timeRow({
     icon: "bi-clock-history",
     label: "Created",
@@ -288,7 +288,7 @@ export function renderEdgeDetails(container, edgeData) {
     isoString: updatedAt
   })}
 
-    ${debugAccordion(edgeData?.id || "edge", props)}
+    ${metadataAccordion(edgeData?.id || "edge", metadata)}
   `;
   wireCopyButtons(container);
 }

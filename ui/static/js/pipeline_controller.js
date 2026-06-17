@@ -60,8 +60,8 @@ export function wirePipelineRunControls({
   if (!fileInput) throw new Error(`Missing file input: #${fileInputId}`);
   if (!keywordSel) throw new Error(`Missing keyword select: #${keywordSelectId}`);
   if (!runBtn) throw new Error(`Missing run button: #${runBtnId}`);
-  if (!runMenuBtn) throw new Error(`Missing run menu button: #${runMenuBtnId}`);
-  if (!resetBtn) throw new Error(`Missing reset button: #${resetBtnId}`);
+  // The split-menu and its reset action are optional — the toolbar may render
+  // just the Run button.
 
   /** Whether a pipeline run is currently active. */
   let isRunning = false;
@@ -80,13 +80,13 @@ export function wirePipelineRunControls({
     const enabled = hasKeyword && hasFile && !isRunning;
 
     runBtn.disabled = !enabled;
-    runMenuBtn.disabled = !enabled; // only allow reset when not running (you can change this)
-    resetBtn.disabled = isRunning;  // don’t allow reset mid-run
+    if (runMenuBtn) runMenuBtn.disabled = isRunning;
+    if (resetBtn) resetBtn.disabled = isRunning;  // don’t allow reset mid-run
 
     // Tooltip hints
-    if (!hasKeyword) runBtn.title = "🔐 Select a keyword first";
-    else if (!hasFile) runBtn.title = "📄 Choose a file first";
-    else runBtn.title = "🚀 Start pipeline";
+    if (!hasKeyword) runBtn.title = "Select a focus area first";
+    else if (!hasFile) runBtn.title = "Choose a document first";
+    else runBtn.title = "Start pipeline";
 
     _setRunButtonVisualState(runBtn, { running: isRunning });
   }
@@ -113,30 +113,32 @@ export function wirePipelineRunControls({
   keywordSel.addEventListener("change", syncRunUi);
   fileInput.addEventListener("change", syncRunUi);
 
-  // Manual reset action (split-menu)
-  resetBtn.addEventListener("click", async () => {
-    if (isRunning) return;
+  // Manual reset action (optional split-menu item)
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      if (isRunning) return;
 
-    if (!hasPipelineSession()) {
-      // nothing to reset, but still give user feedback if you want
-      return;
-    }
+      if (!hasPipelineSession()) {
+        // nothing to reset, but still give user feedback if you want
+        return;
+      }
 
-    const ok = await confirmModal({
-      title: "🧨 Reset current pipeline session?",
-      body:
-        "This will clear the current run (oversight tables, cached triplets, and the selected upload file). " +
-        "You can't undo this.",
-      confirmText: "Yes, reset",
-      cancelText: "Cancel",
-      confirmBtnClass: "btn-danger",
+      const ok = await confirmModal({
+        title: "🧨 Reset current pipeline session?",
+        body:
+          "This will clear the current run (oversight tables, cached triplets, and the selected upload file). " +
+          "You can't undo this.",
+        confirmText: "Yes, reset",
+        cancelText: "Cancel",
+        confirmBtnClass: "btn-danger",
+      });
+
+      if (!ok) return;
+
+      resetPipelineSession();
+      syncRunUi();
     });
-
-    if (!ok) return;
-
-    resetPipelineSession();
-    syncRunUi();
-  });
+  }
 
   // Run pipeline (primary action)
   runBtn.addEventListener("click", async () => {

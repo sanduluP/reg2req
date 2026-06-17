@@ -144,6 +144,16 @@ class GraphStore:
         )
 
 
+    # ---------- maintenance ----------
+    def reset_graph(self) -> None:
+        """
+        Remove all nodes and relationships (standard `DETACH DELETE`).
+
+        Used by the "Initialize graph" action so the curated baseline is built
+        on a clean database.
+        """
+        self.query("MATCH (n) DETACH DELETE n")
+
     # ---------- high-level write API ----------
     def upsert_relation(self, relation: GraphRelation) -> list[dict[str, Any]]:
         """
@@ -151,14 +161,16 @@ class GraphStore:
 
         - Nodes are stored as `(:Node {name: ...})`
         - Predicates are stored as real relationship types, e.g. `:has_parameter`
-        - Relationship `source` and `target` properties mirror the node names
-        - Caller-provided provenance `source` is preserved as `provenance_source`
+        - The relationship endpoints (source/target) are the graph topology
+          itself — they are NOT duplicated as relationship properties.
+        - Caller-provided provenance `source` is kept as `provenance_source`
+          (the knowledge source: a document name or `seed:...`).
         - Structured provenance (doc name, quality, chunk) is APPENDED to
           `rel.provenance_records` (JSON strings) and `rel.provenance_docs`
           (doc names), never overwritten — so the same triple asserted by
-          multiple documents keeps every document's provenance
+          multiple documents keeps every document's provenance.
         - Dedupe is based on source node, target node, and relationship type;
-          provenance entries dedupe on their exact JSON payload
+          provenance entries dedupe on their exact JSON payload.
         """
         src_name = str(relation["source"]["label"]).strip()
         tgt_name = str(relation["target"]["label"]).strip()
@@ -172,6 +184,9 @@ class GraphStore:
         raw_props = relation["edge"].get("properties") or {}
         provenance_source = str(raw_props.get("source", "")).strip() if isinstance(raw_props, dict) else ""
         provenance = raw_props.get("provenance") if isinstance(raw_props, dict) else None
+        # The node-name mirrors (`source`/`target`) are intentionally dropped:
+        # they are redundant with the topology and previously collided with the
+        # provenance `source`. Everything else passes through as edge metadata.
         props_all = {
             str(k): v
             for k, v in raw_props.items()
@@ -203,15 +218,11 @@ class GraphStore:
 
         on_create_props = {
             **props_all,
-            "source": src_name,
-            "target": tgt_name,
             "created_at": now_iso,
             "last_updated_at": now_iso,
         }
         on_match_props = {
             **props_all,
-            "source": src_name,
-            "target": tgt_name,
             "last_updated_at": now_iso,
         }
 
@@ -226,7 +237,7 @@ class GraphStore:
         SET t.last_updated_at = datetime(),
             t.created_at = coalesce(t.created_at, datetime())
 
-        MERGE (s)-[rel:`{rel_type}` {{source: $source_name, target: $target_name}}]->(t)
+        MERGE (s)-[rel:`{rel_type}`]->(t)
         ON CREATE SET rel += $on_create
         ON MATCH SET rel += $on_match
 

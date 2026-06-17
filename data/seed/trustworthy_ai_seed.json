@@ -1,0 +1,481 @@
+{
+  "source_label": "seed:trustworthy-ai",
+  "knowledge_type": "seed",
+  "count": 79,
+  "triples": [
+    {
+      "subject": "Transparency",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Transparency is a Requirement"
+    },
+    {
+      "subject": "Explainability",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Explainability is a Requirement"
+    },
+    {
+      "subject": "Accountability",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Accountability is a Requirement"
+    },
+    {
+      "subject": "Fairness",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Fairness is a Requirement"
+    },
+    {
+      "subject": "Privacy",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Privacy is a Requirement"
+    },
+    {
+      "subject": "Safety",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Safety is a Requirement"
+    },
+    {
+      "subject": "Technical Robustness",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Technical Robustness is a Requirement"
+    },
+    {
+      "subject": "Human Agency",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Human Agency is a Requirement"
+    },
+    {
+      "subject": "Human Oversight",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Human Oversight is a Requirement"
+    },
+    {
+      "subject": "Lawfulness",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Lawfulness is a Requirement"
+    },
+    {
+      "subject": "Data Governance",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Data Governance is a Requirement"
+    },
+    {
+      "subject": "Diversity",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Diversity is a Requirement"
+    },
+    {
+      "subject": "Non-discrimination",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Non-discrimination is a Requirement"
+    },
+    {
+      "subject": "Societal Well-being",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Societal Well-being is a Requirement"
+    },
+    {
+      "subject": "Environmental Well-being",
+      "predicate": "IsA",
+      "object": "Requirement",
+      "sentence": "Environmental Well-being is a Requirement"
+    },
+    {
+      "subject": "Interpretability",
+      "predicate": "IsSubclassOf",
+      "object": "Transparency",
+      "sentence": "Interpretability is subclass of Transparency"
+    },
+    {
+      "subject": "Traceability",
+      "predicate": "IsSubclassOf",
+      "object": "Transparency",
+      "sentence": "Traceability is subclass of Transparency"
+    },
+    {
+      "subject": "Auditability",
+      "predicate": "IsSubclassOf",
+      "object": "Transparency",
+      "sentence": "Auditability is subclass of Transparency"
+    },
+    {
+      "subject": "Explanation Robustness",
+      "predicate": "IsSubclassOf",
+      "object": "Explainability",
+      "sentence": "Explanation Robustness is subclass of Explainability"
+    },
+    {
+      "subject": "Explanation Consistency",
+      "predicate": "IsA",
+      "object": "Measure",
+      "sentence": "Explanation Consistency is a Measure"
+    },
+    {
+      "subject": "Explanation Consistency",
+      "predicate": "ContributesTo",
+      "object": "Explanation Robustness",
+      "sentence": "Explanation Consistency contributes to Explanation Robustness"
+    },
+    {
+      "subject": "Quantus_Consistency",
+      "predicate": "IsA",
+      "object": "Metric",
+      "sentence": "Quantus_Consistency is a Metric"
+    },
+    {
+      "subject": "Quantus_Consistency",
+      "predicate": "Implements",
+      "object": "Explanation Consistency",
+      "sentence": "Quantus_Consistency implements Explanation Consistency"
+    },
+    {
+      "subject": "Quantus_Consistency",
+      "predicate": "AppliesTo",
+      "object": "Tabular Data",
+      "sentence": "Quantus_Consistency applies to Tabular Data"
+    },
+    {
+      "subject": "Audit Trail",
+      "predicate": "IsSubclassOf",
+      "object": "Accountability",
+      "sentence": "Audit Trail is subclass of Accountability"
+    },
+    {
+      "subject": "Governance",
+      "predicate": "IsSubclassOf",
+      "object": "Accountability",
+      "sentence": "Governance is subclass of Accountability"
+    },
+    {
+      "subject": "Right to Explanation",
+      "predicate": "IsSubclassOf",
+      "object": "Accountability",
+      "sentence": "Right to Explanation is subclass of Accountability"
+    },
+    {
+      "subject": "Human-in-the-Loop",
+      "predicate": "IsSubclassOf",
+      "object": "Human Agency",
+      "sentence": "Human-in-the-Loop is subclass of Human Agency"
+    },
+    {
+      "subject": "Override Capability",
+      "predicate": "IsSubclassOf",
+      "object": "Human Agency",
+      "sentence": "Override Capability is subclass of Human Agency"
+    },
+    {
+      "subject": "Informed Consent",
+      "predicate": "IsSubclassOf",
+      "object": "Human Agency",
+      "sentence": "Informed Consent is subclass of Human Agency"
+    },
+    {
+      "subject": "Data Minimization",
+      "predicate": "IsSubclassOf",
+      "object": "Privacy",
+      "sentence": "Data Minimization is subclass of Privacy"
+    },
+    {
+      "subject": "Purpose Limitation",
+      "predicate": "IsSubclassOf",
+      "object": "Privacy",
+      "sentence": "Purpose Limitation is subclass of Privacy"
+    },
+    {
+      "subject": "Right to Erasure",
+      "predicate": "IsSubclassOf",
+      "object": "Privacy",
+      "sentence": "Right to Erasure is subclass of Privacy"
+    },
+    {
+      "subject": "Equality",
+      "predicate": "IsSubclassOf",
+      "object": "Fairness",
+      "sentence": "Equality is subclass of Fairness"
+    },
+    {
+      "subject": "Equity",
+      "predicate": "IsSubclassOf",
+      "object": "Fairness",
+      "sentence": "Equity is subclass of Fairness"
+    },
+    {
+      "subject": "Equality",
+      "predicate": "IsDimensionOf",
+      "object": "Fairness",
+      "sentence": "Equality is dimension of Fairness"
+    },
+    {
+      "subject": "Equity",
+      "predicate": "IsDimensionOf",
+      "object": "Fairness",
+      "sentence": "Equity is dimension of Fairness"
+    },
+    {
+      "subject": "Bias",
+      "predicate": "IsThreatTo",
+      "object": "Fairness",
+      "sentence": "Bias is threat to Fairness"
+    },
+    {
+      "subject": "Algorithmic Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Algorithmic Bias is subclass of Bias"
+    },
+    {
+      "subject": "Historical Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Historical Bias is subclass of Bias"
+    },
+    {
+      "subject": "Class Imbalance",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Class Imbalance is subclass of Bias"
+    },
+    {
+      "subject": "Covariate Shift",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Covariate Shift is subclass of Bias"
+    },
+    {
+      "subject": "Selection Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Selection Bias is subclass of Bias"
+    },
+    {
+      "subject": "Group Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Group Bias is subclass of Bias"
+    },
+    {
+      "subject": "Sampling Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Sampling Bias is subclass of Bias"
+    },
+    {
+      "subject": "Measurement Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Measurement Bias is subclass of Bias"
+    },
+    {
+      "subject": "Label Noise",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Label Noise is subclass of Bias"
+    },
+    {
+      "subject": "Proxy Features",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Proxy Features is subclass of Bias"
+    },
+    {
+      "subject": "Aggregation Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Bias",
+      "sentence": "Aggregation Bias is subclass of Bias"
+    },
+    {
+      "subject": "Bias",
+      "predicate": "IsA",
+      "object": "Risk",
+      "sentence": "Bias is a Risk"
+    },
+    {
+      "subject": "Robustness Risk",
+      "predicate": "IsA",
+      "object": "Risk",
+      "sentence": "Robustness Risk is a Risk"
+    },
+    {
+      "subject": "Privacy Risk",
+      "predicate": "IsA",
+      "object": "Risk",
+      "sentence": "Privacy Risk is a Risk"
+    },
+    {
+      "subject": "Transparency Risk",
+      "predicate": "IsA",
+      "object": "Risk",
+      "sentence": "Transparency Risk is a Risk"
+    },
+    {
+      "subject": "Distribution Shift",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Distribution Shift is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Data Leakage",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Data Leakage is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Feature Scaling Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Feature Scaling Bias is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Outlier Bias",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Outlier Bias is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Overfitting",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Overfitting is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Adversarial Vulnerability",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Adversarial Vulnerability is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Lack of Formal Guarantees",
+      "predicate": "IsSubclassOf",
+      "object": "Robustness Risk",
+      "sentence": "Lack of Formal Guarantees is subclass of Robustness Risk"
+    },
+    {
+      "subject": "Algorithmic Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Algorithmic Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Historical Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Historical Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Class Imbalance",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Class Imbalance is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Group Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Group Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Selection Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Selection Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Sampling Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Sampling Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Proxy Features",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Proxy Features is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Aggregation Bias",
+      "predicate": "IsThreatTo",
+      "object": "Diversity Non-Discrimination Fairness",
+      "sentence": "Aggregation Bias is threat to Diversity Non-Discrimination Fairness"
+    },
+    {
+      "subject": "Distribution Shift",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Distribution Shift is threat to Technical Robustness"
+    },
+    {
+      "subject": "Data Leakage",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Data Leakage is threat to Technical Robustness"
+    },
+    {
+      "subject": "Feature Scaling Bias",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Feature Scaling Bias is threat to Technical Robustness"
+    },
+    {
+      "subject": "Outlier Bias",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Outlier Bias is threat to Technical Robustness"
+    },
+    {
+      "subject": "Overfitting",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Overfitting is threat to Technical Robustness"
+    },
+    {
+      "subject": "Covariate Shift",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Covariate Shift is threat to Technical Robustness"
+    },
+    {
+      "subject": "Adversarial Vulnerability",
+      "predicate": "IsThreatTo",
+      "object": "Technical Robustness",
+      "sentence": "Adversarial Vulnerability is threat to Technical Robustness"
+    },
+    {
+      "subject": "Lack of Formal Guarantees",
+      "predicate": "IsThreatTo",
+      "object": "Accountability",
+      "sentence": "Lack of Formal Guarantees is threat to Accountability"
+    },
+    {
+      "subject": "Measurement Bias",
+      "predicate": "IsThreatTo",
+      "object": "Transparency",
+      "sentence": "Measurement Bias is threat to Transparency"
+    },
+    {
+      "subject": "Label Noise",
+      "predicate": "IsThreatTo",
+      "object": "Transparency",
+      "sentence": "Label Noise is threat to Transparency"
+    },
+    {
+      "subject": "Bias",
+      "predicate": "IsThreatTo",
+      "object": "Accountability",
+      "sentence": "Bias is threat to Accountability"
+    }
+  ]
+}

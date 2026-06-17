@@ -25,67 +25,64 @@
 <body>
     <div class="container-fluid app-frame p-2">
         <section class="card p-2 pipeline-toolbar-card">
-            <!-- helper text
-            <div class="text-muted small mb-3">
-                <i class="bi bi-info-circle me-1"></i>
-                Extract, compare, and integrate structured knowledge from regulatory and technical documents.
-            </div> -->
+            <div class="pipeline-header">
+                <div class="pipeline-title">
+                    <i class="bi bi-diagram-3 me-1"></i> KBDebugger · Trustworthy-AI Knowledge Extractor
+                </div>
+                <div class="pipeline-subtitle">
+                    Extract, review and compare trustworthy-AI knowledge from documents into an auditable Neo4j graph.
+                </div>
+            </div>
 
             <div class="pipeline-toolbar">
-                <div class="pipeline-keyword position-relative">
-                    <div class="input-group input-group-sm">
-                        <label class="input-group-text text-muted" for="keyword-select">
-                            <i class="bi bi-search me-1"></i> Keyword
-                        </label>
-                        <select id="keyword-select" class="form-select" disabled>
-                            <option value="">Loading keywords...</option>
-                        </select>
+                <!-- Step 1 · Initialize the knowledge graph (optional) -->
+                <div class="pipeline-step pipeline-init">
+                    <div class="step-label">
+                        <span class="step-badge">1</span> Initialize graph
+                        <span class="step-optional">optional</span>
                     </div>
+                    <button id="seed-graph-btn" class="btn btn-outline-primary btn-sm w-100" type="button"
+                        title="Load curated Trustworthy-AI baseline knowledge into Neo4j">
+                        <i class="bi bi-database-add me-1"></i> Load baseline knowledge
+                    </button>
+                    <div class="step-hint">Skip to use your existing Neo4j (.env).</div>
+                </div>
 
-                    <div id="keyword-spinner" class="position-absolute top-50 translate-middle-y d-none"
-                        aria-hidden="true">
+                <!-- Step 2 · Choose focus -->
+                <div class="pipeline-step pipeline-keyword position-relative">
+                    <div class="step-label">
+                        <span class="step-badge">2</span> Focus area
+                    </div>
+                    <select id="keyword-select" class="form-select form-select-sm" disabled>
+                        <option value="">Loading focus areas...</option>
+                    </select>
+                    <div id="keyword-spinner" class="position-absolute d-none" aria-hidden="true">
                         <div class="spinner-border spinner-border-sm text-primary" role="status">
                             <span class="visually-hidden">Loading...</span>
                         </div>
                     </div>
+                    <div class="step-hint">A single dimension, or a complete scan.</div>
                 </div>
 
-                <div class="pipeline-document input-group input-group-sm">
-                    <label class="input-group-text text-muted" for="documents">
-                        <i class="bi bi-file-earmark-pdf me-1"></i> Documents
-                    </label>
-                    <input class="form-control" type="file" id="documents" name="documents" multiple disabled>
+                <!-- Step 3 · Documents -->
+                <div class="pipeline-step pipeline-document">
+                    <div class="step-label">
+                        <span class="step-badge">3</span> Documents
+                    </div>
+                    <input class="form-control form-control-sm" type="file" id="documents" name="documents" multiple
+                        disabled>
+                    <div class="step-hint">PDF · one or more files.</div>
                 </div>
 
-                <div class="pipeline-actions btn-group btn-group-sm">
-                    <button id="pipeline-run-btn" class="btn btn-success" type="button" disabled>
+                <!-- Run -->
+                <div class="pipeline-step pipeline-actions">
+                    <div class="step-label">&nbsp;</div>
+                    <button id="pipeline-run-btn" class="btn btn-success btn-sm w-100" type="button" disabled>
                         <span class="pipeline-run-icon me-1" aria-hidden="true">
                             <i class="bi bi-play-fill"></i>
                         </span>
                         <span class="pipeline-run-label">Run</span>
                     </button>
-
-                    <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split"
-                        data-bs-toggle="dropdown" aria-expanded="false" aria-label="More pipeline actions"
-                        title="More actions" disabled id="pipeline-run-menu-btn"></button>
-
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li>
-                            <button id="pipeline-reset-btn" class="dropdown-item text-danger" type="button">
-                                <i class="bi bi-trash3 me-2"></i> Reset current pipeline
-                            </button>
-                        </li>
-                    </ul>
-
-                    <!-- Ready badge (hidden by default) -->
-                    <!-- <span id="run-ready-badge" class="badge text-bg-success d-none">
-                        ✅ Ready
-                    </span>
-
-                    <div class="form-text text-muted small mt-1">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Select keyword + upload a file, then hit <b>Run</b>.
-                    </div> -->
                 </div>
             </div>
         </section>

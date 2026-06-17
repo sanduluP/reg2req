@@ -141,7 +141,7 @@ function _extractSubgraphSentenceRecords(payload) {
 
         out.push({
             sentence,
-            source: props.source || "",
+            source: props.provenance_source || props.source || "",
             page_number: (props.page_number ?? null),
             relation: e?.data?.label || props.relation || "",
             created_at: props.created_at ?? null,

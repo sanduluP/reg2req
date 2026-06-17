@@ -85,16 +85,17 @@ class KnowledgeGraphRetriever:
         )
         results.extend({"relation": rel, "match_pattern": "target_name"} for rel in rels)
 
-        # --- Pattern 3: keyword in relationship type or provenance fields ---
+        # --- Pattern 3: keyword in relationship type, sentence, or provenance ---
+        # Source/target node matching is already covered by patterns 1 and 2,
+        # so this pattern only inspects relationship-level fields.
         rels = graph.query_relations(
             """
             MATCH (n:Node)-[r]->(m:Node)
             WHERE
                 toLower(type(r))                            CONTAINS $keyword OR
                 toLower(replace(type(r), "_", " "))        CONTAINS $keyword OR
-                toLower(coalesce(toString(properties(r)["sentence"]), "")) CONTAINS $keyword OR
-                toLower(coalesce(toString(properties(r)["source"]), ""))   CONTAINS $keyword OR
-                toLower(coalesce(toString(properties(r)["target"]), ""))   CONTAINS $keyword
+                toLower(coalesce(toString(properties(r)["sentence"]), ""))           CONTAINS $keyword OR
+                toLower(coalesce(toString(properties(r)["provenance_source"]), ""))  CONTAINS $keyword
             RETURN
                 n.name AS source,
                 m.name AS target,
@@ -237,7 +238,7 @@ class KnowledgeGraphRetriever:
             props = rel["edge"]["properties"]
 
             sentence = props.get("sentence")
-            source_doc = props.get("source")
+            source_doc = props.get("provenance_source") or props.get("source")
             page = props.get("page_number")
 
             header = Text()

@@ -100,13 +100,14 @@ def test_graph_store_upsert_uses_node_name_and_typed_relationship() -> None:
 
     assert "MERGE (s:Node {name: $source_name})" in cypher
     assert "MERGE (t:Node {name: $target_name})" in cypher
-    assert "MERGE (s)-[rel:`has_parameter` {source: $source_name, target: $target_name}]->(t)" in cypher
+    assert "MERGE (s)-[rel:`has_parameter`]->(t)" in cypher
     assert ":REL" not in cypher
     assert "label" not in params["on_create"]
     assert params["source_name"] == "AI Model"
     assert params["target_name"] == "learning_rate"
-    assert params["on_create"]["source"] == "AI Model"
-    assert params["on_create"]["target"] == "learning_rate"
+    # Node-name mirrors are no longer stored as relationship properties.
+    assert "source" not in params["on_create"]
+    assert "target" not in params["on_create"]
     assert params["on_create"]["provenance_source"] == "review.xlsx"
 
 
@@ -123,7 +124,7 @@ def test_graph_store_upsert_sanitizes_non_standard_predicate() -> None:
 
     store.upsert_relation(relation("AI Model", "Invented", "Human Oversight"))
 
-    assert "MERGE (s)-[rel:`invented` {source: $source_name, target: $target_name}]->(t)" in captured["cypher"]
+    assert "MERGE (s)-[rel:`invented`]->(t)" in captured["cypher"]
 
 
 def test_graph_store_upsert_rejects_unsafe_predicate_before_query() -> None:

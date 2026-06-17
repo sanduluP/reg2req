@@ -1,0 +1,102 @@
+# Trustworthy-AI seed knowledge (ground truth).
+# One statement per line: <Subject> <predicate phrase> <Object>.
+# Recognized predicate phrases (mapped to standard predicates):
+#   "is a" / "is an"   -> IsA / IsAn
+#   "is subclass of"   -> IsSubclassOf
+#   "implements"       -> Implements
+#   "applies to"       -> AppliesTo
+#   "is dimension of"  -> IsDimensionOf
+#   "is threat to"     -> IsThreatTo
+#   "contributes to"   -> ContributesTo
+# Blank lines and lines starting with '#' are ignored.
+# Node label casing is preserved exactly as written.
+
+Transparency is a Requirement
+Explainability is a Requirement
+Accountability is a Requirement
+Fairness is a Requirement
+Privacy is a Requirement
+Safety is a Requirement
+Technical Robustness is a Requirement
+Human Agency is a Requirement
+Human Oversight is a Requirement
+Lawfulness is a Requirement
+Data Governance is a Requirement
+Diversity is a Requirement
+Non-discrimination is a Requirement
+Societal Well-being is a Requirement
+Environmental Well-being is a Requirement
+
+Interpretability is subclass of Transparency
+Traceability is subclass of Transparency
+Auditability is subclass of Transparency
+
+Explainability is a Requirement
+Explanation Robustness is subclass of Explainability
+Explanation Consistency is a Measure
+Explanation Consistency contributes to Explanation Robustness
+Quantus_Consistency is a Metric
+Quantus_Consistency implements Explanation Consistency
+Quantus_Consistency applies to Tabular Data
+
+Audit Trail is subclass of Accountability
+Governance is subclass of Accountability
+Right to Explanation is subclass of Accountability
+
+Human-in-the-Loop is subclass of Human Agency
+Override Capability is subclass of Human Agency
+Informed Consent is subclass of Human Agency
+
+Data Minimization is subclass of Privacy
+Purpose Limitation is subclass of Privacy
+Right to Erasure is subclass of Privacy
+
+Equality is subclass of Fairness
+Equity is subclass of Fairness
+Equality is dimension of Fairness
+Equity is dimension of Fairness
+Bias is threat to Fairness
+Algorithmic Bias is subclass of Bias
+Historical Bias is subclass of Bias
+Class Imbalance is subclass of Bias
+Covariate Shift is subclass of Bias
+Selection Bias is subclass of Bias
+Group Bias is subclass of Bias
+Sampling Bias is subclass of Bias
+Measurement Bias is subclass of Bias
+Label Noise is subclass of Bias
+Proxy Features is subclass of Bias
+Aggregation Bias is subclass of Bias
+
+Bias is a Risk
+Robustness Risk is a Risk
+Privacy Risk is a Risk
+Transparency Risk is a Risk
+
+Distribution Shift is subclass of Robustness Risk
+Data Leakage is subclass of Robustness Risk
+Feature Scaling Bias is subclass of Robustness Risk
+Outlier Bias is subclass of Robustness Risk
+Overfitting is subclass of Robustness Risk
+Adversarial Vulnerability is subclass of Robustness Risk
+Lack of Formal Guarantees is subclass of Robustness Risk
+
+Algorithmic Bias is threat to Diversity Non-Discrimination Fairness
+Historical Bias is threat to Diversity Non-Discrimination Fairness
+Class Imbalance is threat to Diversity Non-Discrimination Fairness
+Group Bias is threat to Diversity Non-Discrimination Fairness
+Selection Bias is threat to Diversity Non-Discrimination Fairness
+Sampling Bias is threat to Diversity Non-Discrimination Fairness
+Proxy Features is threat to Diversity Non-Discrimination Fairness
+Aggregation Bias is threat to Diversity Non-Discrimination Fairness
+Distribution Shift is threat to Technical Robustness
+Data Leakage is threat to Technical Robustness
+Feature Scaling Bias is threat to Technical Robustness
+Outlier Bias is threat to Technical Robustness
+Overfitting is threat to Technical Robustness
+Covariate Shift is threat to Technical Robustness
+Adversarial Vulnerability is threat to Technical Robustness
+Lack of Formal Guarantees is threat to Accountability
+Measurement Bias is threat to Transparency
+Label Noise is threat to Transparency
+Bias is threat to Accountability

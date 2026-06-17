@@ -50,7 +50,7 @@ def review_triplets(
         props = rel["edge"].get("properties", {})
 
         sentence = props.get("sentence", "")
-        source = props.get("source")
+        source = props.get("provenance_source") or props.get("source")
         page = props.get("page_number")
 
         body = []

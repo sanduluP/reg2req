@@ -11,6 +11,7 @@ import { initKeywordDropdown } from "./keyword_dropdown_controller.js";
 import { wirePipelineRunControls } from "./pipeline_controller.js";
 import { wireHumanOversightSubmit, renderHumanOversightFromPipelineResult, wireGoToTripletsButton } from "./oversight_controller.js";
 import { wireComparisonView } from "./comparison_controller.js";
+import { wireSeedButton } from "./seed_controller.js";
 import { registerSubgraphRenderer } from "./graph_refresh.js";
 import { hideProgressPanel } from "./pipeline_progress_ui.js"
 
@@ -47,8 +48,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     fileInputId: "documents",
     keywordSelectId: "keyword-select",
     runBtnId: "pipeline-run-btn",
-    runMenuBtnId: "pipeline-run-menu-btn",
-    resetBtnId: "pipeline-reset-btn",
     onDone: (result) => {
       // hideProgressPanel()
       renderHumanOversightFromPipelineResult(result);
@@ -61,6 +60,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 4) Compare tab (cross-document overlap / alignment / conflicts / ambiguity)
   // ---------------------------------------------------------------------------
   wireComparisonView();
+
+  // ---------------------------------------------------------------------------
+  // 5) One-click seed (populate a fresh Neo4j with curated ground truth)
+  // ---------------------------------------------------------------------------
+  wireSeedButton({ seedBtnId: "seed-graph-btn", keywordSelectId: "keyword-select" });
 
   // // ---------------------------------------------------------------------------
   // // 4) Optional: graph free-text search (if you keep that UI)

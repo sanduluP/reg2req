@@ -81,7 +81,12 @@ export function createCytoscapeGraph(containerId = "cy", detailsContainerId = "d
     edge.source().addClass("highlighted-node");
     edge.target().addClass("highlighted-node");
 
-    if (detailsEl) renderEdgeDetails(detailsEl, edge.data());
+    if (detailsEl) {
+      renderEdgeDetails(detailsEl, edge.data(), {
+        source: edge.source().data("label"),
+        target: edge.target().data("label"),
+      });
+    }
   }
 
   function selectEdgeById(edgeId) {

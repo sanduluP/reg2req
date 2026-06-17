@@ -14,8 +14,15 @@ import { getSearchKeywords, getSubgraph } from "./graph_client.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js"
 import { showGlobalLoading, hideGlobalLoading } from "./modals/global_loading_modal.js";
 import { setLastSubgraphPayload } from "./state/graph_state.js";
+import { showToast } from "./toast.js";
 
 let currentSubgraphAbort = null;
+
+/**
+ * Sentinel value for the "complete scan" option (all trustworthy-AI dimensions).
+ * UI-only for now; the backend scan-all path is wired later.
+ */
+export const ALL_DIMENSIONS = "__ALL_DIMENSIONS__";
 
 /**
  * Initialize the keyword dropdown and connect it to subgraph fetch/render.
@@ -95,8 +102,8 @@ export async function initKeywordDropdown({
 
   try {
     setLoading(true, {
-      title: "Loading keywords…",
-      subtitle: "Populating the keyword list.",
+      title: "Loading focus areas…",
+      subtitle: "Populating the trustworthy-AI dimensions.",
     });
 
     const data = await getSearchKeywords();
@@ -107,17 +114,26 @@ export async function initKeywordDropdown({
 
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "🔐 Select a keyword";
+    placeholder.textContent = "Select a focus area…";
     placeholder.disabled = true;
     placeholder.selected = true;
     select.appendChild(placeholder);
 
+    // Complete-scan option (all dimensions) — listed first for visibility.
+    const allOpt = document.createElement("option");
+    allOpt.value = ALL_DIMENSIONS;
+    allOpt.textContent = "🔍 Complete trustworthy-AI scan (all dimensions)";
+    select.appendChild(allOpt);
+
+    const dimGroup = document.createElement("optgroup");
+    dimGroup.label = "Single dimension";
     for (const k of keywords) {
       const opt = document.createElement("option");
       opt.value = k;
       opt.textContent = k;
-      select.appendChild(opt);
+      dimGroup.appendChild(opt);
     }
+    select.appendChild(dimGroup);
 
     // IMPORTANT: no auto-selection, no auto-fetch.
 
@@ -127,6 +143,18 @@ export async function initKeywordDropdown({
       // If somehow empty, keep upload disabled
       if (!chosen) {
         setHasKeywordSelected(false);
+        return;
+      }
+
+      // Complete-scan is a UI preview for now: acknowledge the choice but keep
+      // the run gated until the scan-all backend path is wired.
+      if (chosen === ALL_DIMENSIONS) {
+        setHasKeywordSelected(false);
+        showToast({
+          type: "info",
+          title: "Complete scan",
+          message: "Scanning all trustworthy-AI dimensions is coming soon — pick a single focus area to run now.",
+        });
         return;
       }
 
@@ -149,7 +177,7 @@ export async function initKeywordDropdown({
     });
   } catch (err) {
     console.error(err);
-    select.innerHTML = `<option value="">❌ Failed to load keywords</option>`;
+    select.innerHTML = `<option value="">❌ Failed to load focus areas</option>`;
     select.disabled = true;
     setHasKeywordSelected(false);
   } finally {

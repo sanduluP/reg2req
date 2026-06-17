@@ -130,6 +130,15 @@ This script:
 
 Then open 👉 **http://localhost:5002**
 
+### 5. Initialize the knowledge graph (first run)
+
+A fresh Neo4j is empty, so every focus area returns an empty subgraph and a pipeline run fails with *"No KG relations retrieved"*. Build a curated Trustworthy-AI baseline in one click:
+
+- **UI**: toolbar **Step 1 · Initialize graph → Load baseline knowledge**. This **clears the whole graph and rebuilds the baseline** (a confirmation is shown). It's optional — skip it to use whatever is already in your existing Neo4j (from `.env`).
+- **CLI**: `PYTHONPATH=src python tools/seed_graph.py --reset` (full clear + rebuild). Without `--reset` it is an idempotent additive upsert; `--clear` removes only previously seeded edges; `--dump-json` regenerates the parsed artifact only.
+
+The seed statements live in [`data/seed/trustworthy_ai_seed.txt`](data/seed/trustworthy_ai_seed.txt) (parsed copy in `trustworthy_ai_seed.json`). Seeding writes through the same Neo4j path as extraction, so seeded edges carry the standard structure — `(:Node)` source/target endpoints (the topology, not duplicated as properties), the originating `sentence`, and append-only `provenance_records` — plus `knowledge_type = "seed"` and a `provenance_source` of `seed:trustworthy-ai` to distinguish ground truth from pipeline-extracted knowledge. Connection details come from `.env`.
+
 ---
 
 ## 🐳 Docker / Hugging Face Spaces
