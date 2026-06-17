@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import re
-from typing import List, TypeVar
+from typing import Dict, List, TypeVar
+
+import rich
 
 from kbdebugger.extraction.types import BatchTextDecomposer, TextDecomposer, Qualities
 from kbdebugger.llm.model_access import respond
@@ -39,10 +41,16 @@ class ChunkBatchDecomposeConfig:
         Should generally remain 0.0 for deterministic, parseable JSON.
     """
     max_qualities_per_chunk: int = 12
-    max_tokens: int = 1024
+    # Output ceiling for the batched call. Kept generous because a reasoning
+    # model (e.g. deepseek-r1) spends part of the budget on <think> tokens; too
+    # small a ceiling truncates the JSON body and the whole batch is lost.
+    max_tokens: int = 4096
     temperature: float = 0.0
     # Retry policy (kept simple and explicit)
     max_retries: int = 8
+    # Upper bound when escalating max_tokens across retries (a truncated batch
+    # gets more room each attempt, but never beyond this).
+    max_tokens_cap: int = 16384
 
 
 def build_chunk_decomposer(
@@ -177,15 +185,50 @@ def build_chunk_batch_decomposer(
             max_qualities_per_chunk=str(cfg.max_qualities_per_chunk),
         )
 
-        raw_response = respond(
-            prompt_str,
-            max_tokens=cfg.max_tokens,
-            temperature=cfg.temperature,
-            json_mode=True,
-        )
+        # Empty chunks legitimately yield no qualities, so they must not count
+        # as a "failed" batch when we decide whether to retry.
+        non_empty_chunks = sum(1 for s in sanitized if s)
 
-        obj = ensure_json_object(raw_response)
-        id_to_qualities = coerce_batch_qualities(obj, expected_n=len(texts))
+        # Retry when the batch result is structurally unparseable. The usual
+        # cause is a *truncated* JSON body: a reasoning model (deepseek-r1)
+        # spends much of its token budget on <think> tokens and runs out before
+        # closing the JSON, so the whole batch would otherwise be silently
+        # dropped as []. Each attempt raises the token ceiling to give the body
+        # room to complete. (A 429 inside respond() is handled separately by
+        # _call_with_rate_limit_retries.)
+        id_to_qualities: Dict[int, Qualities] = {}
+        for attempt in range(1, cfg.max_retries + 1):
+            max_tokens = min(cfg.max_tokens * attempt, cfg.max_tokens_cap)
+            raw_response = _call_with_rate_limit_retries(
+                lambda mt=max_tokens: respond(
+                    prompt_str,
+                    max_tokens=mt,
+                    temperature=cfg.temperature,
+                    json_mode=True,
+                ),
+                max_retries=cfg.max_retries,
+            )
+
+            obj = ensure_json_object(raw_response)
+            parsed_ok = isinstance(obj.get("results"), list)
+            id_to_qualities = coerce_batch_qualities(obj, expected_n=len(texts))
+
+            # Stop once the JSON parsed structurally (even if some chunks are
+            # legitimately empty), or there was nothing to decompose anyway.
+            if parsed_ok or non_empty_chunks == 0:
+                break
+
+            rich.print(
+                f"[chunk_batch_decomposer] ⚠️ unparseable batch result "
+                f"(attempt {attempt}/{cfg.max_retries}, max_tokens={max_tokens}, "
+                f"non_empty_chunks={non_empty_chunks}) — retrying with a higher token budget."
+            )
+        else:
+            rich.print(
+                f"[chunk_batch_decomposer] ❌ batch still unparseable after "
+                f"{cfg.max_retries} attempts; {non_empty_chunks} chunk(s) will be "
+                f"dropped. Lower the batch size or raise max_tokens / max_tokens_cap."
+            )
 
         # Reconstruct a dense, ordered list, applying a hard cap for safety.
         out: List[Qualities] = []

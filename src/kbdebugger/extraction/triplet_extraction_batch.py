@@ -32,12 +32,22 @@ def build_triplet_extraction_prompt_batch(
     sentences: list[str],
     allowed_predicates: Sequence[str] | None = None,
     schema_contexts: Sequence[SchemaGroundingContext] | None = None,
+    *,
+    neutral_mode: bool = False,
 ) -> str:
     """
-    Build a prompt that asks the LLM to extract schema-shaped triplets for
-    multiple sentences in one call, returning a single JSON object.
+    Build a prompt that asks the LLM to extract triplets for multiple sentences
+    in one call, returning a single JSON object.
+
+    With ``neutral_mode=True`` the prompt drops the standards layer entirely
+    (no controlled predicate vocabulary, no deontic/modality classification, no
+    standard_schema hints) and asks for free-form natural-language predicates.
+    This is the fair "extraction core" used for the MINE benchmark, where the
+    article topics are general and a fixed ontology would force-fit or discard
+    facts. The standards prompt remains the default for the KBDebugger pipeline.
     """
-    examples = load_json_resource("triplets_batch")
+    template_name = "triplets_batch_neutral" if neutral_mode else "triplets_batch"
+    examples = load_json_resource(template_name)
     examples_json = json.dumps(examples, ensure_ascii=False)
 
     payload = []
@@ -46,11 +56,19 @@ def build_triplet_extraction_prompt_batch(
         if not clean:
             continue
         item = {"id": i, "sentence": clean}
-        if schema_contexts is not None and i < len(schema_contexts):
+        if not neutral_mode and schema_contexts is not None and i < len(schema_contexts):
             item["standard_schema"] = schema_contexts[i].to_prompt_dict()
         payload.append(item)
 
     payload_json = json.dumps(payload, ensure_ascii=False)
+
+    if neutral_mode:
+        return render_prompt(
+            template_name,
+            examples_json=examples_json,
+            payload_json=payload_json,
+        )
+
     predicates = sanitize_allowed_predicates(allowed_predicates)
     predicates_json = json.dumps(predicates, ensure_ascii=False)
 
@@ -125,21 +143,28 @@ def extract_triplets_batch(
     parallel: bool = False,
     max_workers: int = 2,
     schema_grounding_enabled: bool = True,
+    neutral_mode: bool = False,
 ) -> List[ExtractionResult]:
     sent_list = [s.strip() for s in sentences if s and s.strip()]
     if not sent_list:
         return []
 
-    predicates = sanitize_allowed_predicates(allowed_predicates)
-    if not predicates:
-        return [
-            {
-                "sentence": sentence,
-                "triplets": [],
-                "skipped_reason": "No relationship types were provided for triplet extraction.",
-            }
-            for sentence in sent_list
-        ]
+    if neutral_mode:
+        # Free-form extraction core (MINE): no controlled vocabulary, so there is
+        # no predicate list to validate against and no standards schema to ground.
+        predicates: Sequence[str] | None = None
+        schema_grounding_enabled = False
+    else:
+        predicates = sanitize_allowed_predicates(allowed_predicates)
+        if not predicates:
+            return [
+                {
+                    "sentence": sentence,
+                    "triplets": [],
+                    "skipped_reason": "No relationship types were provided for triplet extraction.",
+                }
+                for sentence in sent_list
+            ]
 
     all_results: List[ExtractionResult] = []
 
@@ -170,6 +195,7 @@ def extract_triplets_batch(
                     worker_count=max_workers,
                     schema_contexts=batch_contexts,
                     schema_profile=profile,
+                    neutral_mode=neutral_mode,
                 ): batch_idx
                 for batch_idx, (batch, batch_contexts) in batches
             }
@@ -205,6 +231,7 @@ def extract_triplets_batch(
             worker_count=1,
             schema_contexts=batch_contexts,
             schema_profile=profile,
+            neutral_mode=neutral_mode,
         )
         all_results.extend(batch_results)
 
@@ -289,14 +316,17 @@ def _safe_extract_batch_via_llm(
     *,
     batch_idx: int,
     batch: list[str],
-    predicates: Sequence[str],
+    predicates: Sequence[str] | None,
     num_batches: int,
     worker_count: int,
     schema_contexts: Sequence[SchemaGroundingContext] | None = None,
     schema_profile=None,
+    neutral_mode: bool = False,
 ) -> tuple[int, list[ExtractionResult]]:
     model_label = _llm_model_label()
-    prompt = build_triplet_extraction_prompt_batch(batch, predicates, schema_contexts)
+    prompt = build_triplet_extraction_prompt_batch(
+        batch, predicates, schema_contexts, neutral_mode=neutral_mode
+    )
     started = perf_counter()
 
     try:
