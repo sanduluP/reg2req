@@ -47,8 +47,12 @@ def _configure_judge() -> None:
     api_key = os.getenv(os.getenv("MINE_JUDGE_API_KEY_ENV", "OPENAI_API_KEY"))
 
     kwargs: dict[str, Any] = {"model": model, "api_key": api_key, "api_base": api_base}
-    if "gpt-5" in model:  # gpt-5 family requires these
-        kwargs.update(temperature=1.0, max_tokens=16000, reasoning={"effort": "high"})
+    if "gpt-5" in model:
+        # Exact parity with kg-gen's MINE-1 judge (experiments/MINE/_1_evaluation.py):
+        #   model="openai/gpt-5", reasoning_effort="high", temperature=1.0, max_tokens=16000
+        # reasoning_effort is overridable via MINE_JUDGE_EFFORT (e.g. "low") for cheap calibration.
+        effort = os.getenv("MINE_JUDGE_EFFORT", "high")
+        kwargs.update(temperature=1.0, max_tokens=16000, reasoning_effort=effort)
     else:
         kwargs.update(temperature=0.0, max_tokens=4000)
     dspy.configure(lm=dspy.LM(**kwargs))
@@ -229,13 +233,31 @@ def main() -> None:
             f"accuracy={accuracy * 100:.1f}%"
         )
 
+    # Tally the judge's actual spend from litellm's per-call cost (None for
+    # endpoints litellm can't price, e.g. the on-prem deepseek — then it's $0).
+    judge_calls = judge_cost = 0
+    try:
+        history = dspy.settings.lm.history
+        judge_calls = len(history)
+        judge_cost = sum((h.get("cost") or 0.0) for h in history)
+    except Exception:
+        pass
+
     mine_score = mean(per_essay_accuracy) if per_essay_accuracy else 0.0
     summary = {
         "system": args.system,
         "judge_model": judge_model,
         "essays_scored": len(per_essay_accuracy),
         "mine_1_score": f"{mine_score * 100:.2f}%",
+        "judge_calls": judge_calls,
+        "judge_cost_usd": round(judge_cost, 4),
     }
+    if judge_cost:
+        per_essay = judge_cost / len(per_essay_accuracy) if per_essay_accuracy else 0.0
+        print(
+            f"💰 judge spend: ${judge_cost:.4f} over {judge_calls} calls "
+            f"(~${per_essay:.4f}/essay → ~${per_essay * 100:.2f} per 100 essays)"
+        )
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, ensure_ascii=False, indent=2)
     print(f"\n=== MINE-1 [{args.system}] = {summary['mine_1_score']} over {summary['essays_scored']} essays ===")
