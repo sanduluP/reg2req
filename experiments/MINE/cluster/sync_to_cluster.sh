@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # sync_to_cluster.sh — push the MINE judging bits to Pegasus WITHOUT committing.
-# Mirrors the kggen-eval convention: local repo is the source of truth, the
+# Convention: the local repo is the source of truth, the
 # cluster copy is a read-only execution mirror. We only sync what the on-cluster
 # judge needs — the scorer, the dataset, and the two systems' pre-built KGs —
 # NOT the gitignored results/ (those are generated on the cluster and scp'd back).

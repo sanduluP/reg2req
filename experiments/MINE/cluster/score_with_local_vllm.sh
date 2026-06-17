@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # score_with_local_vllm.sh — judge both MINE systems against a vLLM server
-# running on the SAME node (localhost). Run this INSIDE a Pegasus GPU job that is
-# already serving the judge model (e.g. via kggen-eval/scripts/serve_vllm.sh).
+# running on the SAME node (localhost). Normally run by run_experiment.sh once the
+# server is up; can also run standalone against an already-serving judge.
 #
-# Reuses the kggen-eval venv (it already has kg_gen + dspy + the cached
-# all-MiniLM-L6-v2 retriever), so score_kgs.py runs unchanged. Results land in
-# ./results/<system>/<judge-slug>/ — scp that back and feed it to make_report.py
-# for a 3rd-judge ablation column.
+# Uses this repo's scorer env ($SCORER_ENV = /fscratch/abuali/venvs/kbextractor-mine,
+# built by setup_envs.sh: kg_gen + dspy + the cached all-MiniLM-L6-v2 retriever), so
+# score_kgs.py runs unchanged. Results land in ./results/<system>/<judge-slug>/ —
+# scp that back and feed it to make_report.py for a 3rd-judge ablation column.
 #
 # Usually invoked by run_experiment.sh (which exports MINE_JUDGE_MODEL/_API_BASE
 # after the server is up), but also runnable standalone against an already-serving
@@ -16,11 +16,11 @@
 #   VLLM_PORT          vLLM port (default 8000)
 #   JUDGE_WORKERS      concurrent judge calls (vLLM batches — 16 is comfortable)
 #   SCORE_ARGS         extra score_kgs.py flags (e.g. "--limit 3", "--overwrite")
-#   KGGEN_VENV         path to the venv with kg_gen + dspy
+#   SCORER_ENV         this repo's venv (kg_gen + dspy + retriever; from setup_envs.sh)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
-PY="${KGGEN_VENV:-/fscratch/abuali/venvs/kggen-eval}/bin/python"
+PY="${SCORER_ENV:-/fscratch/abuali/venvs/kbextractor-mine}/bin/python"
 PORT="${VLLM_PORT:-8000}"
 
 # ─────────────── 🐴 EDIT THESE — the scorer knobs ───────────────
@@ -33,11 +33,11 @@ export MINE_JUDGE_MODEL="${MINE_JUDGE_MODEL:-openai/Qwen/Qwen3-30B-A3B-Instruct-
 export MINE_JUDGE_API_BASE="${MINE_JUDGE_API_BASE:-http://localhost:${PORT}/v1}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-dummy}"   # litellm needs *some* key; vLLM ignores it
 
-[[ -x "$PY" ]] || { echo "❌ venv python not found: $PY (set KGGEN_VENV)"; exit 1; }
+[[ -x "$PY" ]] || { echo "❌ scorer python not found: $PY — run cluster/setup_envs.sh (set SCORER_ENV)"; exit 1; }
 # Preflight: is the judge actually serving on this node?
 if ! curl -sf "$MINE_JUDGE_API_BASE/models" >/dev/null 2>&1; then
-  echo "❌ no vLLM at $MINE_JUDGE_API_BASE — serve the judge first:"
-  echo "     bash <kggen-eval>/scripts/serve_vllm.sh   # waits until READY"
+  echo "❌ no vLLM at $MINE_JUDGE_API_BASE — start the server first."
+  echo "   (run_experiment.sh does this for you; standalone, serve the model on \$VLLM_PORT.)"
   exit 1
 fi
 

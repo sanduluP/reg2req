@@ -20,7 +20,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
 
 # ─────────────── EDIT THESE — the LLM-to-serve knobs ───────────────
-VENV="/fscratch/abuali/venvs/kggen-eval"
+VLLM_ENV="/fscratch/abuali/venvs/vllm"                 # reusable; created by setup_envs.sh
+SCORER_ENV="/fscratch/abuali/venvs/kbextractor-mine"   # this repo's scorer env
 MODEL_DIR="/fscratch/abuali/models/Qwen3-30B-A3B-Instruct-2507-FP8"
 SERVED_MODEL_NAME="Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"
 PORT=8000
@@ -32,15 +33,16 @@ TP_SIZE=1
 echo "🌙 ===== MINE judging — started $(date) ====="
 echo "   host=$(hostname)  model=$SERVED_MODEL_NAME  port=$PORT  CUDA=${CUDA_VISIBLE_DEVICES:-?}"
 
-[ -x "$VENV/bin/vllm" ] || { echo "❌ vllm not in venv: $VENV"; exit 1; }
-[ -d "$MODEL_DIR" ]     || { echo "❌ model dir not found: $MODEL_DIR"; exit 1; }
+[ -x "$VLLM_ENV/bin/vllm" ]   || { echo "❌ vllm not in env: $VLLM_ENV — run cluster/setup_envs.sh"; exit 1; }
+[ -x "$SCORER_ENV/bin/python" ] || { echo "❌ scorer env missing: $SCORER_ENV — run cluster/setup_envs.sh"; exit 1; }
+[ -d "$MODEL_DIR" ]          || { echo "❌ model dir not found: $MODEL_DIR"; exit 1; }
 
 LOG_DIR="$ROOT/logs"; mkdir -p "$LOG_DIR"
 VLLM_LOG="$LOG_DIR/vllm_$(date +%Y%m%d_%H%M%S).log"
 echo "📄 vLLM log → $VLLM_LOG"
 
-# 1) start vLLM in the background (kggen-eval's proven flags).
-nohup "$VENV/bin/vllm" serve "$MODEL_DIR" \
+# 1) start vLLM in the background (from the reusable vLLM env).
+nohup "$VLLM_ENV/bin/vllm" serve "$MODEL_DIR" \
     --port "$PORT" \
     --served-model-name "$SERVED_MODEL_NAME" \
     --tensor-parallel-size "$TP_SIZE" \
@@ -80,6 +82,7 @@ echo "✅ vLLM READY → http://localhost:${PORT}/v1"
 export MINE_JUDGE_MODEL="openai/${SERVED_MODEL_NAME}"
 export MINE_JUDGE_API_BASE="http://localhost:${PORT}/v1"
 export VLLM_PORT="$PORT"
+export SCORER_ENV
 bash "$ROOT/cluster/score_with_local_vllm.sh"
 RC=$?
 
