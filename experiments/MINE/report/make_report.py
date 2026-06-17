@@ -365,7 +365,7 @@ all other graphs use temperature 0.
 (each judge over its own article set, n in the header). **All judges rank KBExtractor above
 KGGen** — the ranking is robust to the choice of judge. Absolute levels shift with judge
 strictness (a more lenient judge lifts both systems), but the KBExtractor−KGGen gap persists
-under every judge.{matched_note}{gpt5_note}
+under every judge.{gpt5_note}{matched_note}
 
 ---
 

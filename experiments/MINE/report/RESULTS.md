@@ -47,7 +47,7 @@ all other graphs use temperature 0.
 (each judge over its own article set, n in the header). **All judges rank KBExtractor above
 KGGen** — the ranking is robust to the choice of judge. Absolute levels shift with judge
 strictness (a more lenient judge lifts both systems), but the KBExtractor−KGGen gap persists
-under every judge. Head-to-head on those same 10 articles the primary judge scores KBExtractor 76.7% / KGGen 56.7%, so GPT-5 (79.3 / 52.7) agrees on the ranking on identical essays. GPT-5 (`reasoning_effort=high`, the KGGen-paper's own judge in `_1_evaluation.py`) is capped at 10 articles — the full two-system run (~200 judgements) would cost ≈ $34 at ≈ $0.17/article.
+under every judge. GPT-5 (`reasoning_effort=high`, the KGGen-paper's own judge in `_1_evaluation.py`) is capped at 10 articles — the full two-system run (~200 judgements) would cost ≈ $34 at ≈ $0.17/article. Head-to-head on those same 10 articles the primary judge scores KBExtractor 76.7% / KGGen 56.7%, so GPT-5 (79.3 / 52.7) agrees on the ranking on identical essays.
 
 ---
 
