@@ -2,7 +2,7 @@
 # srun_submit.sh — GENERAL non-interactive Slurm submitter (the batch sibling of
 # an interactive `srun --pty`). Knows nothing about MINE: you give it resources +
 # a task script, it runs that script on a compute node inside the NVIDIA
-# container, logging to /fscratch/abuali/logs. Self-contained — this repo owns it.
+# container, logging to <repo>/logs/<job>/ (see lib/logging.sh). Self-contained.
 #
 # Usage:
 #   bash cluster/srun_submit.sh PARTITION JOB_NAME CPUS GPUS MEM HOURS SCRIPT [args...]
@@ -17,6 +17,7 @@
 #   BEGIN=2026-06-18T02:00:00  bash cluster/srun_submit.sh ...
 # Run inside screen/tmux on the login node so the nohup'd srun client survives logout.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/logging.sh"
 
 if [ "$#" -lt 7 ]; then
   echo "Usage: $0 PARTITION JOB_NAME CPUS GPUS MEM HOURS SCRIPT [args...]"
@@ -30,13 +31,24 @@ TASK_ARGS="$@"
 
 [ -f "$TASK_SCRIPT" ] || { echo "Error: task script not found: $TASK_SCRIPT"; exit 1; }
 
+# PARTITION="all" → let SLURM grab whichever of these frees up first (curated 40GB+
+# GPU list). SLURM accepts a comma-separated partition list and schedules on the
+# first available. CAUTION: this spans many machines.
+ALL_PARTITIONS="RTXA6000,RTXA6000-AV,L40S,L40S-AV,A100-40GB,A100-80GB,A100-RP,A100-PCI,H100,H100-RP,H100-PCI,H200"
+if [[ "$PARTITION" == "all" ]]; then
+  PARTITION=$ALL_PARTITIONS
+  echo "Using all machines: $PARTITION"
+fi
+
 # Normalize memory ('G' / 'GB' / bare → 'G').
 if   [[ $MEM == *GB ]]; then MEM="${MEM%GB}G"
 elif [[ $MEM != *G  ]]; then MEM="${MEM}G"; fi
 
 WORKDIR=$(pwd)
-LOG_DIR="/fscratch/abuali/logs"; mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/${JOB_NAME}_$(date +%Y%m%d_%H%M%S).log"
+# Master job log → <repo>/logs/<job>/<job>_<ts>.log (override root with LOG_ROOT=…).
+# It's a redirect (not tee) because the nohup'd srun runs with no terminal; the
+# file persists and is `tail -f`-able just the same.
+LOG_FILE="$(log_path "$JOB_NAME")"
 
 # Shared NVIDIA PyTorch container (CUDA 12.8 → Ampere/Hopper/Blackwell). This is a
 # system image, not any repo's — fine to reference.

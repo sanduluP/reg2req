@@ -20,6 +20,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
+source "$(dirname "${BASH_SOURCE[0]}")/lib/logging.sh"     # log_path / LOG_ROOT
 PY="${SCORER_ENV:-/fscratch/abuali/venvs/kbextractor-mine}/bin/python"
 PORT="${VLLM_PORT:-8000}"
 
@@ -41,8 +42,7 @@ if ! curl -sf "$MINE_JUDGE_API_BASE/models" >/dev/null 2>&1; then
   exit 1
 fi
 
-LOG_DIR="$ROOT/logs"; mkdir -p "$LOG_DIR"
-LOG="$LOG_DIR/score_$(date +%Y%m%d_%H%M%S).log"
+LOG="$(log_path score)"   # focused per-essay judging log (also flows to the master log)
 echo "🧪 judge=$MINE_JUDGE_MODEL  api_base=$MINE_JUDGE_API_BASE  workers=$WORKERS"
 echo "📄 log → $LOG"
 

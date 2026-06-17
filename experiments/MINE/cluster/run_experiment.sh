@@ -18,6 +18,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
+source "$(dirname "${BASH_SOURCE[0]}")/lib/logging.sh"     # log_path / LOG_ROOT
 
 # ─────────────── EDIT THESE — the LLM-to-serve knobs ───────────────
 VLLM_ENV="/fscratch/abuali/venvs/vllm"                 # reusable; created by setup_envs.sh
@@ -37,8 +38,9 @@ echo "   host=$(hostname)  model=$SERVED_MODEL_NAME  port=$PORT  CUDA=${CUDA_VIS
 [ -x "$SCORER_ENV/bin/python" ] || { echo "❌ scorer env missing: $SCORER_ENV — run cluster/setup_envs.sh"; exit 1; }
 [ -d "$MODEL_DIR" ]          || { echo "❌ model dir not found: $MODEL_DIR"; exit 1; }
 
-LOG_DIR="$ROOT/logs"; mkdir -p "$LOG_DIR"
-VLLM_LOG="$LOG_DIR/vllm_$(date +%Y%m%d_%H%M%S).log"
+# vLLM's own (noisy) stdout goes to a SEPARATE sub-log so the master job log stays
+# readable; this script's narrative is captured by the master log (srun redirect).
+VLLM_LOG="$(log_path vllm)"
 echo "📄 vLLM log → $VLLM_LOG"
 
 # 1) start vLLM in the background (from the reusable vLLM env).

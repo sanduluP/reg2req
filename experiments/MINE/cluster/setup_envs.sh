@@ -14,7 +14,7 @@
 # Run on a COMPUTE node INSIDE the NVIDIA container (heavy CUDA wheels). Submit it
 # as a CPU job from this repo's cluster dir:
 #   bash cluster/srun_submit.sh batch setup_envs 8 0 32G 2 cluster/setup_envs.sh
-#   tail -f /fscratch/abuali/logs/setup_envs_*.log     # ~15-25 min
+#   tail -f logs/setup_envs/setup_envs_*.log     # ~15-25 min
 set -euo pipefail
 
 VENV_ROOT="${VENV_ROOT:-/fscratch/abuali/venvs}"

@@ -44,14 +44,16 @@ bash experiments/MINE/cluster/sync_to_cluster.sh        # → /home/abuali/proje
 # 1. (CLUSTER) ONE-TIME: build the two venvs on a CPU node (~15-25 min).
 cd /home/abuali/projects/kbextractor-mine
 bash cluster/srun_submit.sh batch setup_envs 8 0 32G 2 cluster/setup_envs.sh
-tail -f /fscratch/abuali/logs/setup_envs_*.log          # wait for "✅ done."
+tail -f logs/setup_envs/setup_envs_*.log                # wait for "✅ done."
 
 # 2. (CLUSTER, in screen) submit the judging task for midnight on H100.
 screen -S mine        # (tmux new -s mine works too)
 BEGIN=00:00 bash cluster/srun_submit.sh H100 mine_judge 8 1 80G 6 cluster/run_experiment.sh
 #   Ctrl-a d to detach (screen -r mine to return)
 #   watch:  squeue -u abuali  (PD until 00:00 / a free H100)
-#           tail -f /fscratch/abuali/logs/mine_judge_*.log
+#           tail -f logs/mine_judge/mine_judge_*.log     # master log (everything)
+#           tail -f logs/score/score_*.log               # just the per-essay judging
+#           tail -f logs/vllm/vllm_*.log                 # the vLLM server's own output
 
 # 3. (LOCAL, next morning) pull results back, extend the report to a 3-judge ablation.
 scp -r abuali@login1.pegasus.kl.dfki.de:/home/abuali/projects/kbextractor-mine/results/* \
@@ -69,6 +71,10 @@ Smoke-test first: set `SCORE_ARGS="--limit 3"` in `score_with_local_vllm.sh`.
   `score_with_local_vllm.sh` (`JUDGE_WORKERS`/`SYSTEMS`/`SCORE_ARGS`). SLURM
   resources → the `srun_submit.sh` line. The judge id is derived as
   `openai/<SERVED_MODEL_NAME>`, so the scorer always matches what's served.
+- **Logs** (shared `lib/logging.sh`) live per-project under `kbextractor-mine/logs/`,
+  one timestamped file per category — open any in VSCode:
+  `logs/<job>/…` master job log (everything) · `logs/score/…` per-essay judging ·
+  `logs/vllm/…` the server's own output. Override the root with `LOG_ROOT=/some/dir`.
 - **The `openai/` prefix** is just litellm's OpenAI wire format — it routes to
   `/v1/chat/completions`, which vLLM serves. (Nothing to do with OpenAI the vendor.)
 - **Idempotent.** Re-running skips essays already judged by this judge; for a forced
