@@ -41,8 +41,11 @@ STEP = 100.0 / N_FACTS
 DEEPSEEK_SLUG = "openai-deepseek-r1-32b"
 GPT5_SLUG = "openai-gpt-5"
 QWEN3_SLUG = "openai-Qwen-Qwen3-30B-A3B-Instruct-2507-FP8"
-PRIMARY_SLUG = DEEPSEEK_SLUG                       # drives Tables 1/3 + figs 1/3
+PRIMARY_SLUG = DEEPSEEK_SLUG                       # drives Tables 1/3
 JUDGE_ORDER = [DEEPSEEK_SLUG, GPT5_SLUG, QWEN3_SLUG]  # preferred display order; others appended
+# A judge gets its own distribution + paired-scatter figures only if it scored enough
+# articles for those to be meaningful (a 10-article histogram/scatter is too sparse).
+FULL_MIN = 50
 
 # Friendly labels + one-line details for whichever judges are present on disk.
 JUDGE_LABELS = {
@@ -125,11 +128,17 @@ def discover_judge_stats() -> list[dict]:
         kb_v, kg_v = [kb[i] for i in ids], [kg[i] for i in ids]
         out.append({
             "slug": slug, "label": _prettify_judge(slug), "n": len(ids),
+            "kb": kb, "kg": kg, "ids": ids,          # raw per-essay verdicts (for figs)
             "kb_mean": mean(kb_v), "kg_mean": mean(kg_v),
             "kb_sem": stats.sem(kb_v) if len(kb_v) > 1 else 0.0,
             "kg_sem": stats.sem(kg_v) if len(kg_v) > 1 else 0.0,
         })
     return out
+
+
+def judge_token(label: str) -> str:
+    """Filename-safe short token from a judge label, e.g. 'Qwen3-30B-Instruct' → 'qwen3-30b-instruct'."""
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
 
 
 # Primary judge (deepseek) drives Tables 1/3 + figs 1/3; ALL judges drive the ablation.
@@ -139,12 +148,14 @@ common = sorted(set(kb_ds) & set(kg_ds))         # essays both systems built (10
 S_kb_full = stat_block(list(kb_ds.values()))
 S_kg_full = stat_block(list(kg_ds.values()))
 JUDGES = discover_judge_stats()
+# Judges with enough coverage for their own distribution + paired-scatter figures.
+FULL_JUDGES = [j for j in JUDGES if j["n"] >= FULL_MIN]
 
 
-# --- Figure 1: MINE-1 distribution (Figure-3 analog) -----------------------
-def fig1() -> None:
-    kb = np.array(list(kb_ds.values()))
-    kg = np.array(list(kg_ds.values()))
+# --- Figure 1: MINE-1 distribution, one per full-coverage judge ------------
+def fig_distribution(j: dict) -> str:
+    kb = np.array([j["kb"][i] for i in j["ids"]])
+    kg = np.array([j["kg"][i] for i in j["ids"]])
     edges = (np.arange(N_FACTS + 2) - 0.5) * STEP  # one bin per discrete fact-count
 
     # y headroom so the mean labels sit clear of the bars and curves.
@@ -152,10 +163,11 @@ def fig1() -> None:
     top = ymax * 1.22
 
     fig, ax = plt.subplots(figsize=(8.0, 5.0), constrained_layout=True)
-    for data, colour, label, st, va_off in (
-        (kb, C_KB, "KBExtractor (ours)", S_kb_full, 0),
-        (kg, C_KG, "KGGen", S_kg_full, 14),
+    for data, colour, label, va_off in (
+        (kb, C_KB, "KBExtractor (ours)", 0),
+        (kg, C_KG, "KGGen", 14),
     ):
+        st = stat_block(list(data))
         ax.hist(data, bins=edges, alpha=0.45, color=colour, edgecolor="white", linewidth=0.6,
                 label=f"{label}:  μ={st['mean']:.1f}%,  σ={st['std']:.1f},  n={st['n']}")
         # Fitted normal, scaled from density to article counts.
@@ -170,20 +182,23 @@ def fig1() -> None:
 
     ax.set_xlabel("Facts captured  (%)", fontsize=12)
     ax.set_ylabel("Frequency  (articles)", fontsize=12)
-    ax.set_title("MINE-1 Knowledge Retention — KBExtractor vs KGGen\n"
-                 "same extraction backbone, same judge", fontsize=12.5, fontweight="bold")
+    ax.set_title(f"MINE-1 Knowledge Retention — KBExtractor vs KGGen\n"
+                 f"judge: {j['label']}  (n={j['n']})", fontsize=12.5, fontweight="bold")
     ax.set_xlim(-3, 103)
     ax.set_ylim(0, top)
     ax.legend(loc="upper left", fontsize=9.5, framealpha=0.9)
     ax.grid(axis="y", alpha=0.25)
 
     # Transparency footer (kept off the plot area so the distributions stay clean).
-    footer = (f"Judge: {JUDGE_DEEPSEEK}   |   Extraction core (both systems): {EXTRACTION_CORE}\n"
+    footer = (f"Judge: {JUDGE_DETAILS.get(j['slug'], j['label'])}   |   "
+              f"Extraction core (both systems): {EXTRACTION_CORE}\n"
               f"Retriever: {RETRIEVER}   |   "
               f"MINE-1 = % of 15 known facts entailed by the retrieved sub-graph, per article")
     fig.text(0.5, -0.045, footer, ha="center", va="top", fontsize=7.3, family="monospace",
              bbox=dict(boxstyle="round,pad=0.4", fc="#f5f5f5", ec="#bbbbbb"))
-    _save(fig, "fig1_mine1_distribution")
+    name = f"fig1_mine1_distribution_{judge_token(j['label'])}"
+    _save(fig, name)
+    return name
 
 
 # --- Figure 2: judge-LLM ablation (auto over every discovered judge) --------
@@ -224,11 +239,11 @@ def fig2() -> None:
     _save(fig, "fig2_judge_ablation")
 
 
-# --- Figure 3: paired per-article scatter (deepseek, 98 common) -------------
-def fig3() -> None:
+# --- Figure 3: paired per-article scatter, one per full-coverage judge ------
+def fig_paired(j: dict) -> str:
     rng = np.random.default_rng(0)
-    xs = np.array([kg_ds[i] for i in common])
-    ys = np.array([kb_ds[i] for i in common])
+    xs = np.array([j["kg"][i] for i in j["ids"]])
+    ys = np.array([j["kb"][i] for i in j["ids"]])
     jx = xs + rng.uniform(-1.4, 1.4, len(xs))  # jitter: scores are discrete
     jy = ys + rng.uniform(-1.4, 1.4, len(ys))
     wins = int(np.sum(ys > xs))
@@ -245,7 +260,7 @@ def fig3() -> None:
     ax.set_aspect("equal")
     ax.set_xlabel("KGGen — facts captured (%)", fontsize=11.5)
     ax.set_ylabel("KBExtractor (ours) — facts captured (%)", fontsize=11.5)
-    ax.set_title(f"Per-article paired comparison (deepseek judge, n={len(common)})\n"
+    ax.set_title(f"Per-article paired comparison — judge: {j['label']}  (n={j['n']})\n"
                  f"KBExtractor wins {wins} · ties {ties} · losses {losses}",
                  fontsize=12, fontweight="bold")
     ax.text(0.04, 0.95, "KBExtractor better", transform=ax.transAxes, color=C_KB,
@@ -254,7 +269,9 @@ def fig3() -> None:
             fontsize=10, fontweight="bold")
     ax.legend(loc="lower right", fontsize=9)
     ax.grid(alpha=0.2)
-    _save(fig, "fig3_paired_scatter")
+    name = f"fig3_paired_{judge_token(j['label'])}"
+    _save(fig, name)
+    return name
 
 
 def _save(fig, name: str) -> None:
@@ -294,6 +311,14 @@ def write_markdown() -> None:
                 f"{g5['kg_mean']:.1f}) agrees on the ranking on identical essays.")
     ablation_judges = "; ".join(
         JUDGE_DETAILS.get(j["slug"], j["label"]) for j in JUDGES if j["slug"] != PRIMARY_SLUG) or "—"
+
+    # Per-judge figure lists (one distribution + one paired scatter per full-coverage judge).
+    dist_list = "\n".join(
+        f"  - `fig1_mine1_distribution_{judge_token(j['label'])}` — {j['label']} (n={j['n']})"
+        for j in FULL_JUDGES)
+    paired_list = "\n".join(
+        f"  - `fig3_paired_{judge_token(j['label'])}` — {j['label']} (n={j['n']})"
+        for j in FULL_JUDGES)
 
     md = f"""# MINE-1 Results — KBExtractor vs KGGen
 
@@ -363,13 +388,14 @@ the backbone LLM, the retriever, or the judge.
 
 ## Figures
 
-- **Figure 1** (`fig1_mine1_distribution`): per-article MINE-1 distributions with fitted
-  normals and mean lines (deepseek judge, full set). KBExtractor's mass sits well to the
-  right of KGGen's.
-- **Figure 2** (`fig2_judge_ablation`): per-judge MINE-1 for both systems ({judge_names}) —
-  KBExtractor leads under every judge.
-- **Figure 3** (`fig3_paired_scatter`): per-article paired KBExtractor-vs-KGGen scatter
-  (deepseek judge, all 100 articles); points above the diagonal are KBExtractor wins.
+- **Figure 1 — MINE-1 distribution** (per-article histogram + fitted normal + mean lines),
+  one per full-coverage judge; KBExtractor's mass sits well to the right of KGGen's:
+{dist_list}
+- **Figure 2 — judge-LLM ablation** (`fig2_judge_ablation`): a grouped (clustered) bar chart,
+  one group per judge ({judge_names}); KBExtractor leads under every judge.
+- **Figure 3 — per-article paired comparison**, one per full-coverage judge; each point is an
+  article, points above the *y = x* diagonal are KBExtractor wins:
+{paired_list}
 """
     path = os.path.join(HERE, "RESULTS.md")
     with open(path, "w", encoding="utf-8") as fh:
@@ -379,10 +405,11 @@ the backbone LLM, the retriever, or the judge.
 
 if __name__ == "__main__":
     print(f"primary judge: kb={len(kb_ds)} kg={len(kg_ds)} common={len(common)}")
-    print("judges discovered for ablation: " +
-          ", ".join(f"{j['label']}(n={j['n']})" for j in JUDGES))
-    fig1()
-    fig2()
-    fig3()
+    print("judges (ablation): " + ", ".join(f"{j['label']}(n={j['n']})" for j in JUDGES))
+    print("judges (own dist+paired figs): " + ", ".join(j["label"] for j in FULL_JUDGES))
+    for j in FULL_JUDGES:        # Figure 1 + Figure 3 per full-coverage judge
+        fig_distribution(j)
+        fig_paired(j)
+    fig2()                       # Figure 2: one ablation across all judges
     write_markdown()
     print("done.")

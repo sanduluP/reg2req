@@ -37,13 +37,13 @@ all other graphs use temperature 0.
 
 ## Table 2 — Judge-LLM ablation (robustness across judges)
 
-| System | Judge: deepseek-r1:32b (n=100) | Judge: GPT-5 (high) (n=10) |
-|---|---:|---:|
-| **KBExtractor (ours)** | 79.40% | 79.33% |
-| KGGen | 62.73% | 52.67% |
-| **Gap (KB − KGGen)** | **+16.67** | **+26.67** |
+| System | Judge: deepseek-r1:32b (n=100) | Judge: GPT-5 (high) (n=10) | Judge: Qwen3-30B-Instruct (n=100) |
+|---|---:|---:|---:|
+| **KBExtractor (ours)** | 79.40% | 79.33% | 92.87% |
+| KGGen | 62.73% | 52.67% | 83.73% |
+| **Gap (KB − KGGen)** | **+16.67** | **+26.67** | **+9.13** |
 
-**Table 2.** Judge-LLM ablation: deepseek-r1:32b, GPT-5 (high) each score both systems on identical graphs
+**Table 2.** Judge-LLM ablation: deepseek-r1:32b, GPT-5 (high), Qwen3-30B-Instruct each score both systems on identical graphs
 (each judge over its own article set, n in the header). **All judges rank KBExtractor above
 KGGen** — the ranking is robust to the choice of judge. Absolute levels shift with judge
 strictness (a more lenient judge lifts both systems), but the KBExtractor−KGGen gap persists
@@ -59,7 +59,7 @@ under every judge. Head-to-head on those same 10 articles the primary judge scor
 | Extraction core (both systems) | deepseek-r1:32b (DeepSeek-R1 distilled Qwen-32B, 32B params, temp 0) |
 | Retriever | all-MiniLM-L6-v2 (22.7M params), top-k=8 nearest nodes + 2-hop expansion |
 | Primary judge | deepseek-r1:32b (32B params, on-prem Ollama, temp 0, CoT) |
-| Ablation judge(s) | GPT-5 (OpenAI, reasoning_effort=high, temp 1.0) — exact KGGen-paper parity |
+| Ablation judge(s) | GPT-5 (OpenAI, reasoning_effort=high, temp 1.0) — exact KGGen-paper parity; Qwen3-30B-A3B-Instruct-2507 (FP8, served via vLLM on a DFKI GPU) — open-source robustness check |
 | KGGen temperature note | 98/100 graphs at temp 0; ids 47, 57 needed temp 0.5 — at temp 0 deepseek deterministically emitted object-less relations that KGGen's all-or-nothing `list[Relation]` parse discarded wholesale. KBExtractor built all 100 at temp 0. |
 
 **Table 3.** Experimental configuration. Every component except the extraction *method* is
@@ -70,10 +70,13 @@ the backbone LLM, the retriever, or the judge.
 
 ## Figures
 
-- **Figure 1** (`fig1_mine1_distribution`): per-article MINE-1 distributions with fitted
-  normals and mean lines (deepseek judge, full set). KBExtractor's mass sits well to the
-  right of KGGen's.
-- **Figure 2** (`fig2_judge_ablation`): per-judge MINE-1 for both systems (deepseek-r1:32b, GPT-5 (high)) —
-  KBExtractor leads under every judge.
-- **Figure 3** (`fig3_paired_scatter`): per-article paired KBExtractor-vs-KGGen scatter
-  (deepseek judge, all 100 articles); points above the diagonal are KBExtractor wins.
+- **Figure 1 — MINE-1 distribution** (per-article histogram + fitted normal + mean lines),
+  one per full-coverage judge; KBExtractor's mass sits well to the right of KGGen's:
+  - `fig1_mine1_distribution_deepseek-r1-32b` — deepseek-r1:32b (n=100)
+  - `fig1_mine1_distribution_qwen3-30b-instruct` — Qwen3-30B-Instruct (n=100)
+- **Figure 2 — judge-LLM ablation** (`fig2_judge_ablation`): a grouped (clustered) bar chart,
+  one group per judge (deepseek-r1:32b, GPT-5 (high), Qwen3-30B-Instruct); KBExtractor leads under every judge.
+- **Figure 3 — per-article paired comparison**, one per full-coverage judge; each point is an
+  article, points above the *y = x* diagonal are KBExtractor wins:
+  - `fig3_paired_deepseek-r1-32b` — deepseek-r1:32b (n=100)
+  - `fig3_paired_qwen3-30b-instruct` — Qwen3-30B-Instruct (n=100)
