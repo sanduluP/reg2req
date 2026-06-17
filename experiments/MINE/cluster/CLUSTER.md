@@ -29,11 +29,12 @@ hardcoded inside).
 bash experiments/MINE/cluster/sync_to_cluster.sh                        # → kbextractor-mine
 ( cd /home/faris/code/DSA_HiWi/kggen-eval && bash scripts/sync_to_cluster.sh )
 
-# 1. (CLUSTER, in tmux) ONE command — queues the whole run for midnight on H100.
-tmux new -s mine
+# 1. (CLUSTER, in screen) ONE command — queues the whole run for midnight on H100.
+screen -S mine        # (tmux new -s mine works too)
 bash /home/abuali/projects/kbextractor-mine/cluster/submit_overnight.sh
-#   detach: Ctrl-b d   ·   watch: squeue -u abuali  (PD until 00:00 / a free H100)
-#                                  tail -f /fscratch/abuali/logs/mine_judge_*.log
+#   detach: Ctrl-a d  (reattach: screen -r mine)
+#   watch:  squeue -u abuali  (PD until 00:00 / a free H100)
+#           tail -f /fscratch/abuali/logs/mine_judge_*.log
 
 # 2. (LOCAL, next morning) pull results back, extend the report to a 3-judge ablation.
 scp -r abuali@login1.pegasus.kl.dfki.de:/home/abuali/projects/kbextractor-mine/results/* \

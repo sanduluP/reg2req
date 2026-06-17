@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # …/kbextractor-mine
 PY="${KGGEN_VENV:-/fscratch/abuali/venvs/kggen-eval}/bin/python"
 PORT="${VLLM_PORT:-8000}"
 
-# ─────────────── EDIT THESE — the scorer knobs ───────────────
+# ─────────────── 🐴 EDIT THESE — the scorer knobs ───────────────
 WORKERS="${JUDGE_WORKERS:-16}"     # concurrent judge calls
 SYSTEMS=(kbextractor kggen_deepseek)
 SCORE_ARGS="${SCORE_ARGS:-}"       # e.g. "--limit 3" smoke test · "--overwrite" · "--ids 4,10"
