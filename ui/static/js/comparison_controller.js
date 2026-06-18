@@ -120,6 +120,7 @@ function activeSources() {
 async function loadSources() {
     const wrap = el("compare-sources-wrap");
     const hint = el("compare-sources-hint");
+    const banner = el("compare-no-data-banner");
     if (wrap) wrap.innerHTML = `<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</span>`;
 
     // 1) Neo4j sources
@@ -133,9 +134,11 @@ async function loadSources() {
 
     // 2) Session sources (documents from current pipeline run, not yet pushed to Neo4j)
     const ctx = getRunContext();
-    const sessionNames = Array.isArray(ctx?.source_names) ? ctx.source_names : (ctx?.source_name ? [ctx.source_name] : []);
+    const sessionNames = Array.isArray(ctx?.source_names)
+        ? ctx.source_names
+        : (ctx?.source_name ? [ctx.source_name] : []);
 
-    // Combine: session sources that are NOT already in Neo4j are tagged "session"
+    // Combine: session sources not already in Neo4j are tagged "session"
     const neo4jSet = new Set(neo4jSources);
     const combined = [
         ...neo4jSources.map(n => ({ name: n, type: "graph" })),
@@ -143,17 +146,18 @@ async function loadSources() {
     ];
 
     state.allSources = combined;
+    state.selectedSources = null; // default: all
 
-    // Default: all selected (null = all)
-    state.selectedSources = null;
+    // Show/hide the "no data" workflow guide
+    if (banner) banner.classList.toggle("d-none", combined.length > 0);
 
     renderSourceChips();
 
-    // Hint text
+    // Hint text below the chips
     const hasSession = sessionNames.some(n => !neo4jSet.has(n));
     if (hint) {
         if (combined.length === 0) {
-            hint.textContent = "No sources found. Run the pipeline and submit triplets first.";
+            hint.textContent = "";
         } else if (hasSession) {
             hint.innerHTML =
                 `<i class="bi bi-info-circle me-1"></i>` +

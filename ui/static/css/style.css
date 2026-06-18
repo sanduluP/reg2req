@@ -439,6 +439,12 @@ body {
 }
 
 
+/* Compare tab: workflow guide cards */
+#compare-no-data-banner .card {
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
 #triplets-skipped-wrap {
   flex: 0 0 auto;
   max-height: 10rem;

@@ -361,6 +361,44 @@
                         aria-labelledby="compare-view-tab" style="min-height:0; overflow:auto;">
                         <section class="p-2 p-md-2 bg-white rounded-3 border">
 
+                            <!-- Shown when no provenance data exists in Neo4j yet -->
+                            <div id="compare-no-data-banner" class="d-none mb-3">
+                                <div class="alert alert-info mb-2 py-2 px-3">
+                                    <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>No comparison data yet</div>
+                                    <div class="small">Complete the steps below to enable cross-document analysis.</div>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <div class="card border-0 bg-light px-3 py-2 text-center" style="min-width:140px; flex:1;">
+                                        <div class="fs-4">📄</div>
+                                        <div class="small fw-semibold mt-1">1 · Upload &amp; Run</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">Select a focus area, upload <strong>2+ PDFs</strong>, click Run.</div>
+                                    </div>
+                                    <div class="text-muted align-self-center fs-5">→</div>
+                                    <div class="card border-0 bg-light px-3 py-2 text-center" style="min-width:140px; flex:1;">
+                                        <div class="fs-4">✅</div>
+                                        <div class="small fw-semibold mt-1">2 · Review triplets</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">Go to <em>Review &amp; extract</em>, review extracted facts.</div>
+                                    </div>
+                                    <div class="text-muted align-self-center fs-5">→</div>
+                                    <div class="card border-0 bg-light px-3 py-2 text-center" style="min-width:140px; flex:1;">
+                                        <div class="fs-4">🗄️</div>
+                                        <div class="small fw-semibold mt-1">3 · Submit to KG</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">Click <strong>Submit to KG</strong> — this writes provenance into Neo4j.</div>
+                                    </div>
+                                    <div class="text-muted align-self-center fs-5">→</div>
+                                    <div class="card border-0 bg-light px-3 py-2 text-center" style="min-width:140px; flex:1;">
+                                        <div class="fs-4">🔍</div>
+                                        <div class="small fw-semibold mt-1">4 · Compare</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">Come back here — sources appear and analysis runs.</div>
+                                    </div>
+                                </div>
+                                <div class="text-muted small mt-2">
+                                    <i class="bi bi-lightbulb me-1"></i>Tip: use
+                                    <strong>Initialize graph</strong> (Step 1 in the toolbar) to pre-load curated baseline knowledge,
+                                    then run the pipeline on your own PDFs.
+                                </div>
+                            </div>
+
                             <!-- Source selector: choose which provenance sources to analyse -->
                             <div id="compare-source-panel" class="mb-2 rounded border px-2 py-2" style="background:#f8fafc;">
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-1">
