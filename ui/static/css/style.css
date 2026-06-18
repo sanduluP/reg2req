@@ -318,8 +318,12 @@ body {
   transform-origin: center;
 }
 
-/* The Oversight tab-pane must be a flex column that can shrink */
-#oversight-view {
+/* The Oversight tab-pane must be a flex column that can shrink.
+   Scope to `.active` so the ID selector does NOT override Bootstrap's
+   `.tab-content > .tab-pane { display:none }` for the inactive pane —
+   otherwise oversight stays in the flow and pushes the Compare pane
+   (which follows it in the DOM) below the clipped viewport. */
+#oversight-view.active {
   display: flex;
   flex-direction: column;
   min-height: 0;
