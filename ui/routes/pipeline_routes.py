@@ -242,6 +242,7 @@ def start_triplet_extraction():
         preset=settings.get("preset"),
         families=settings.get("families"),
         custom_predicates=settings.get("custom_predicates"),
+        excluded_predicates=settings.get("excluded_predicates"),
         edge_mode=settings.get("edge_mode"),
         modality=settings.get("modality_on"),
     )

@@ -240,6 +240,7 @@ def resolve_extraction_vocabulary(
     preset: str | None = None,
     families: Iterable[str] | None = None,
     custom_predicates: Iterable[str] | None = None,
+    excluded_predicates: Iterable[str] | None = None,
     edge_mode: str | None = None,
     modality: bool | None = None,
 ) -> dict[str, Any]:
@@ -282,12 +283,20 @@ def resolve_extraction_vocabulary(
     custom = sanitize_allowed_predicates(list(custom_predicates or []))
     allowed = predicates_for_families(chosen_families, custom_predicates=custom)
 
+    # Individually excluded predicates are removed from the allowed list
+    # (case-insensitive), letting the user drop a single predicate without
+    # turning off its whole family.
+    excluded = {p.lower() for p in sanitize_allowed_predicates(list(excluded_predicates or []))}
+    if excluded:
+        allowed = [p for p in allowed if p.lower() not in excluded]
+
     return {
         "preset": preset_key,
         "families": chosen_families,
         "edge_mode": resolved_edge_mode,
         "modality": resolved_modality,
         "custom_predicates": custom,
+        "excluded_predicates": sorted(excluded),
         "allowed_predicates": allowed,
     }
 

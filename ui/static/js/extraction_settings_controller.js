@@ -28,7 +28,8 @@ const state = {
     activeFamilies: new Set(),
     edgeMode: "relaxed",
     modalityOn: true,
-    customPredicates: [],  // [{predicate, family}]
+    customPredicates: [],          // [{predicate, family}]
+    excludedPredicates: new Set(), // individual builtin predicates turned off
     loaded: false,
 };
 
@@ -52,6 +53,7 @@ function persist() {
             edgeMode: state.edgeMode,
             modalityOn: state.modalityOn,
             customPredicates: state.customPredicates,
+            excludedPredicates: [...state.excludedPredicates],
         }));
     } catch (_) { /* ignore */ }
 }
@@ -74,6 +76,7 @@ function applyPreset(presetKey, { keepCustom = true } = {}) {
     state.activeFamilies = new Set(preset.families);
     state.edgeMode = preset.edge_mode;
     state.modalityOn = Boolean(preset.modality);
+    state.excludedPredicates = new Set();  // a fresh preset re-includes everything
     if (!keepCustom) state.customPredicates = [];
 }
 
@@ -87,6 +90,7 @@ export function getExtractionSettings() {
         edge_mode: state.edgeMode,
         modality_on: state.modalityOn,
         custom_predicates: state.customPredicates.map(c => c.predicate),
+        excluded_predicates: [...state.excludedPredicates],
     };
 }
 
@@ -117,6 +121,9 @@ export async function initExtractionSettings({ containerId = "extraction-setting
         state.customPredicates = Array.isArray(saved.customPredicates)
             ? saved.customPredicates.filter(c => c && c.predicate)
             : [];
+        state.excludedPredicates = new Set(
+            Array.isArray(saved.excludedPredicates) ? saved.excludedPredicates : []
+        );
         if (!state.activeFamilies.size) applyPreset(state.preset);
     } else {
         applyPreset(state.defaultPreset);
@@ -139,8 +146,16 @@ function render(container) {
         const builtins = state.families[fkey] || [];
         const customForFamily = state.customPredicates.filter(c => c.family === fkey);
         const chips = [
-            ...builtins.map(p => `<span class="badge text-bg-light border" style="font-weight:400;">${escapeHtml(p)}</span>`),
-            ...customForFamily.map(c => `<span class="badge text-bg-warning" title="custom" data-remove-custom="${escapeHtml(c.predicate)}" style="cursor:pointer;font-weight:400;">${escapeHtml(c.predicate)} &times;</span>`),
+            ...builtins.map(p => {
+                const off = state.excludedPredicates.has(p);
+                const cls = off ? "text-bg-light text-muted border" : "text-bg-primary";
+                const style = off
+                    ? "font-weight:400;cursor:pointer;text-decoration:line-through;opacity:0.65;"
+                    : "font-weight:400;cursor:pointer;";
+                const title = off ? "Excluded — click to include" : "Included — click to exclude";
+                return `<span class="badge ${cls}" data-toggle-pred="${escapeHtml(p)}" title="${title}" style="${style}">${escapeHtml(p)}</span>`;
+            }),
+            ...customForFamily.map(c => `<span class="badge text-bg-warning" title="custom — click to remove" data-remove-custom="${escapeHtml(c.predicate)}" style="cursor:pointer;font-weight:400;">${escapeHtml(c.predicate)} &times;</span>`),
         ].join(" ");
         return `
           <div class="border rounded p-2 mb-1" style="background:#fff;">
@@ -168,6 +183,9 @@ function render(container) {
           Advanced ▾
         </button>
       </div>
+      <div class="text-muted mb-2" style="font-size:0.68rem;">
+        <i class="bi bi-info-circle me-1"></i>Set this while the pipeline runs — triplets are only extracted when you click <strong>Extract triplets</strong>.
+      </div>
 
       <div class="d-flex align-items-center gap-3 flex-wrap mb-1">
         <div class="d-flex align-items-center gap-1">
@@ -185,7 +203,7 @@ function render(container) {
       </div>
 
       <div id="extraction-settings-advanced" class="mt-2 d-none">
-        <div class="small text-muted mb-1">Active families (a preset preselects these; tick to customize). Add custom predicates to any family — they are merged into the allowed list for the run.</div>
+        <div class="small text-muted mb-1">Tick a family to include it. Click any predicate chip to exclude/include it individually. Add custom predicates to any family — all are merged into the allowed list for the run.</div>
         ${familyRows}
       </div>
     `;
@@ -196,7 +214,9 @@ function render(container) {
 function summaryLine() {
     const famCount = state.activeFamilies.size;
     const custom = state.customPredicates.length;
-    return `${famCount} famil${famCount === 1 ? "y" : "ies"} · ${state.edgeMode} · modality ${state.modalityOn ? "on" : "off"}${custom ? ` · ${custom} custom` : ""}`;
+    const excluded = state.excludedPredicates.size;
+    return `${famCount} famil${famCount === 1 ? "y" : "ies"} · ${state.edgeMode} · modality ${state.modalityOn ? "on" : "off"}`
+        + `${custom ? ` · ${custom} custom` : ""}${excluded ? ` · ${excluded} excluded` : ""}`;
 }
 
 function wireEvents(container) {
@@ -259,6 +279,17 @@ function wireEvents(container) {
                 // Make sure the family is active so the custom predicate is used.
                 state.activeFamilies.add(family);
             }
+            persist();
+            render(container);
+            el("extraction-settings-advanced")?.classList.remove("d-none");
+        });
+    });
+
+    container.querySelectorAll("[data-toggle-pred]").forEach(chip => {
+        chip.addEventListener("click", () => {
+            const pred = chip.dataset.togglePred;
+            if (state.excludedPredicates.has(pred)) state.excludedPredicates.delete(pred);
+            else state.excludedPredicates.add(pred);
             persist();
             render(container);
             el("extraction-settings-advanced")?.classList.remove("d-none");

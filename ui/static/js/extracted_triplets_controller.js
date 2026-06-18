@@ -519,7 +519,9 @@ function renderSkippedNotices() {
 }
 
 function isPredicateAllowed(predicate) {
-    return state.allowedPredicates.length === 0 || state.allowedPredicates.includes(predicate);
+    if (state.allowedPredicates.length === 0) return true;
+    const needle = String(predicate || "").trim().toLowerCase();
+    return state.allowedPredicates.some(p => String(p).toLowerCase() === needle);
 }
 
 /**
@@ -684,13 +686,12 @@ function editableCell(field, row) {
 }
 
 function predicateCell(row) {
+    // Free-text box (same as subject/object). The reviewer can type any
+    // predicate; off-vocabulary ones are flagged via the "Non-standard
+    // predicate" tag rather than being constrained by a dropdown.
     const rawPredicate = String(row?.predicate || "").trim();
     const disabled = row.deleted ? "disabled" : "";
-    const options = [...state.allowedPredicates];
-    if (rawPredicate && !options.includes(rawPredicate)) options.unshift(rawPredicate);
-
-    if (options.length === 0) {
-        return `
+    return `
     <input
       type="text"
       class="form-control form-control-sm"
@@ -699,22 +700,6 @@ function predicateCell(row) {
       title="${escapeHtml(formatPredicateLabel(rawPredicate))}"
       ${disabled}
     />
-  `;
-    }
-
-    return `
-    <select
-      class="form-select form-select-sm"
-      data-field="predicate"
-      title="${escapeHtml(rawPredicate)}"
-      ${disabled}
-    >
-      ${options.map(predicate => `
-        <option value="${escapeHtml(predicate)}" ${predicate === rawPredicate ? "selected" : ""}>
-          ${escapeHtml(formatPredicateLabel(predicate))}
-        </option>
-      `).join("")}
-    </select>
   `;
 }
 

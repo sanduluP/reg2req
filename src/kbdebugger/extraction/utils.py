@@ -13,9 +13,18 @@ from typing import Any, Dict
 
 
 def _predicate_set(allowed_predicates: Optional[Sequence[str]]) -> set[str] | None:
+    """
+    Lowercased allowed-predicate set for case-insensitive membership tests.
+
+    Predicate vocabulary is PascalCase by convention, but the LLM (and a user
+    typing a custom free-text predicate) may differ in casing. Matching
+    case-insensitively avoids flagging "provides" as non-standard when the
+    allowed list has "Provides". The triplet keeps its original casing;
+    Neo4j storage snake-cases it later regardless.
+    """
     if allowed_predicates is None:
         return None
-    return {p.strip() for p in allowed_predicates if isinstance(p, str) and p.strip()}
+    return {p.strip().lower() for p in allowed_predicates if isinstance(p, str) and p.strip()}
 
 
 def coerce_triplets(
@@ -62,7 +71,7 @@ def coerce_triplets(
                     rel_clean = rel.strip()
                     if not (subj_clean and obj_clean and rel_clean):
                         continue
-                    if allowed is not None and rel_clean not in allowed:
+                    if allowed is not None and rel_clean.lower() not in allowed:
                         if strict_predicates:
                             # Constrained edge labels: drop off-vocabulary.
                             dropped_predicates.append(rel_clean)

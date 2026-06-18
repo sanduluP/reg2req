@@ -8,6 +8,7 @@ import { resetElapsedTimer, updateElapsedTimer } from "./timer.js";
 import { setRunContext } from "./state/oversight_state.js";
 import { confirmModal } from "./modals/confirm_modal.js";
 import { hasPipelineSession, resetPipelineSession } from "./ui_reset.js";
+import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
 
 
 /**
@@ -175,6 +176,12 @@ export function wirePipelineRunControls({
     showProgressPanel();
     resetElapsedTimer();
     updateProgressPanel({ stage: "queued", message: "Queued…", current: null, total: null });
+
+    // Redirect to Review & extract so the user can configure the extraction
+    // profile (predicate families, edge mode, modality, custom predicates)
+    // while Docling / filtering / decomposition run. Triplet extraction will
+    // wait for an explicit "Extract triplets" click, so there's no race.
+    switchToTopLevelTab({ tab: TopLevelTabs.OVERSIGHT });
 
     let jobId;
     try {

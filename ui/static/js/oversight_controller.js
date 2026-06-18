@@ -22,6 +22,11 @@ let allNoveltyResults = [];
 let tripletExtractionInFlight = false;
 let tripletExtractionGeneration = 0;
 
+// Qualities waiting for the user to launch triplet extraction. Extraction is
+// NOT auto-fired anymore: the human configures the extraction profile first,
+// then clicks "Extract triplets".
+let pendingTripletItems = [];
+
 function sourceDocIndex(result) {
   const raw = result?.source_context?.source_doc_index;
   const parsed = Number(raw);
@@ -228,31 +233,23 @@ export function renderHumanOversightFromPipelineResult(pipelineResult) {
   wireGoToTripletsButton();
 
   const selectedItems = toTripletExtractionItems(allNoveltyResults);
-  const generation = ++tripletExtractionGeneration;
+  ++tripletExtractionGeneration;
+  pendingTripletItems = selectedItems;
 
   if (!selectedItems.length) {
     setTripletStatus("Triplet extraction: no reviewed qualities available.");
+    syncExtractTripletsButton();
     return;
   }
 
-  setTripletStatus(`Triplet extraction: ${selectedItems.length} qualities queued for predicate-constrained extraction.`);
-
-  const startBackgroundTriplets = () => {
-    void runTripletExtractionJobForItems(selectedItems, {
-      generation,
-      showOverlay: false,
-      activateOnDone: false,
-      alertOnError: false,
-      pollIntervalMs: 2000,
-      confirmOverwrite: false,
-    });
-  };
-
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(startBackgroundTriplets, { timeout: 1000 });
-  } else {
-    setTimeout(startBackgroundTriplets, 0);
-  }
+  // Do NOT auto-extract. The human-in-the-loop reviews qualities and confirms
+  // the extraction profile (predicate families, edge mode, modality, custom
+  // predicates) first, then clicks "Extract triplets". The profile can be set
+  // while the pipeline is still running.
+  setTripletStatus(
+    `${selectedItems.length} qualities ready. Review your extraction profile above, then click “Extract triplets”.`
+  );
+  syncExtractTripletsButton();
 }
 
 function escapeHtml(str) {
@@ -335,6 +332,7 @@ async function runTripletExtractionJobForItems(selectedItems, {
   }
 
   tripletExtractionInFlight = true;
+  syncExtractTripletsButton();
   setTripletStatus(`Triplet extraction: ${selectedItems.length} qualities sent, waiting for LLM results...`);
   if (showOverlay) showOversightOverlay(overlayTitle, overlaySubtitle);
 
@@ -366,12 +364,14 @@ async function runTripletExtractionJobForItems(selectedItems, {
     return false;
   } finally {
     tripletExtractionInFlight = false;
+    syncExtractTripletsButton();
     if (showOverlay) hideOversightOverlay();
   }
 }
 
 export function wireHumanOversightSubmit() {
   wireGoToTripletsButton();
+  wireExtractTripletsButton();
 }
 
 function sleep(ms) {
@@ -397,8 +397,45 @@ export function wireGoToTripletsButton() {
   btn.addEventListener("click", () => {
     const ok = showCachedTripletsStep();
     if (!ok) {
-      alert("No extracted triplets yet. Triplets are generated automatically after a pipeline run.");
+      alert("No extracted triplets yet. Click “Extract triplets” to generate them with your chosen profile.");
     }
+  });
+}
+
+const getExtractTripletsButton = () => document.getElementById("oversight-extract-triplets");
+
+/**
+ * Show the "Extract triplets" call-to-action when qualities are waiting and
+ * extraction is not already running.
+ */
+function syncExtractTripletsButton() {
+  const btn = getExtractTripletsButton();
+  if (!btn) return;
+  const ready = pendingTripletItems.length > 0 && !tripletExtractionInFlight;
+  btn.classList.toggle("d-none", !ready);
+  btn.disabled = !ready;
+}
+
+export function wireExtractTripletsButton() {
+  const btn = getExtractTripletsButton();
+  if (!btn || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+
+  btn.addEventListener("click", () => {
+    if (!pendingTripletItems.length) {
+      alert("No reviewed qualities are available for extraction yet.");
+      return;
+    }
+    const generation = ++tripletExtractionGeneration;
+    syncExtractTripletsButton();
+    void runTripletExtractionJobForItems(pendingTripletItems, {
+      generation,
+      showOverlay: true,
+      activateOnDone: true,
+      alertOnError: true,
+      pollIntervalMs: 1500,
+      confirmOverwrite: false,
+    });
   });
 }
 
@@ -410,6 +447,8 @@ export function resetHumanOversightUI() {
   grouped = null;
   tripletExtractionInFlight = false;
   tripletExtractionGeneration += 1;
+  pendingTripletItems = [];
+  syncExtractTripletsButton();
   setTripletStatus("Triplet extraction: waiting for reviewed qualities.");
 
   ["existing", "partially_new", "new"].forEach((k) => {
