@@ -56,6 +56,29 @@ def test_overlap_relations_returns_only_multi_doc_edges() -> None:
     assert len(overlap) == 1
     assert overlap[0]["source"] == "explainability"
     assert set(overlap[0]["docs"]) == {"iso24028.pdf", "fraunhofer.pdf"}
+    # One doc said RECOMMENDED, the other unspecified -> agreement.
+    assert overlap[0]["verdict"] == "AGREEMENT"
+
+
+def test_overlap_relations_flags_modality_tension() -> None:
+    edges = [
+        ProvenanceEdge(
+            source="system",
+            predicate="provides",
+            target="explanation",
+            docs=("a.pdf", "b.pdf"),
+            records=(
+                {"doc": "a.pdf", "quality": "The system shall provide an explanation.", "modality": "MANDATORY"},
+                {"doc": "b.pdf", "quality": "The system may provide an explanation.", "modality": "OPTIONAL"},
+            ),
+        ),
+    ]
+    overlap = overlap_relations(edges)
+
+    assert len(overlap) == 1
+    assert overlap[0]["verdict"] == "TENSION"
+    assert overlap[0]["modalities"] == ["MANDATORY", "OPTIONAL"]
+    assert overlap[0]["modality_by_doc"] == {"a.pdf": "MANDATORY", "b.pdf": "OPTIONAL"}
 
 
 def test_concept_coverage_applies_same_as_canonicalization() -> None:

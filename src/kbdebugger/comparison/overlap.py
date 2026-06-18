@@ -37,15 +37,37 @@ def document_coverage(edges: Sequence[ProvenanceEdge]) -> list[dict[str, Any]]:
     ]
 
 
+def _modality_by_doc(edge: ProvenanceEdge) -> dict[str, str]:
+    """Map each document to the modality it asserted for this edge (if any)."""
+    out: dict[str, str] = {}
+    for record in edge.records:
+        doc = str(record.get("doc") or "").strip()
+        modality = str(record.get("modality") or "").strip().upper()
+        if doc and modality and doc not in out:
+            out[doc] = modality
+    return out
+
+
 def overlap_relations(edges: Sequence[ProvenanceEdge]) -> list[dict[str, Any]]:
     """
     Assertions supported by two or more documents — the direct
     inter-document agreement table.
+
+    Each row carries a `verdict` derived from the deontic modality the
+    documents attached to the same (subject, predicate, object):
+      - AGREEMENT: the documents agree (same modality, or none specified)
+      - TENSION:   the same assertion carries different obligation strengths
+                   across documents (e.g. MANDATORY in one, OPTIONAL in another)
+    This is the core "same dimension + same relation + different strength"
+    signal — a contradiction surfacing as a graph pattern.
     """
     out: list[dict[str, Any]] = []
     for edge in edges:
         if len(edge.docs) < 2:
             continue
+        modality_by_doc = _modality_by_doc(edge)
+        distinct_modalities = {m for m in modality_by_doc.values() if m}
+        verdict = "TENSION" if len(distinct_modalities) >= 2 else "AGREEMENT"
         out.append(
             {
                 "source": edge.source,
@@ -53,9 +75,13 @@ def overlap_relations(edges: Sequence[ProvenanceEdge]) -> list[dict[str, Any]]:
                 "target": edge.target,
                 "docs": list(edge.docs),
                 "records": [dict(r) for r in edge.records],
+                "modality_by_doc": modality_by_doc,
+                "modalities": sorted(distinct_modalities),
+                "verdict": verdict,
             }
         )
-    out.sort(key=lambda item: (-len(item["docs"]), item["source"]))
+    # Tensions first, then by breadth of support.
+    out.sort(key=lambda item: (item["verdict"] != "TENSION", -len(item["docs"]), item["source"]))
     return out
 
 
@@ -115,9 +141,14 @@ def build_overlap_report(
     concept once aligned.
     """
     from .alignment import same_as_clusters
+    from .dimensions import dimension_canon_for_names
 
     edges = fetch_provenance_edges(graph, sources=sources)
-    canon = same_as_clusters(graph)
+
+    # Curated dimension aliases fill vocabulary gaps; reviewer-accepted SAME_AS
+    # clusters always win over them.
+    names = {e.source for e in edges} | {e.target for e in edges}
+    canon = {**dimension_canon_for_names(names), **same_as_clusters(graph)}
 
     return {
         "coverage": document_coverage(edges),

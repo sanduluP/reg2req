@@ -311,19 +311,32 @@ function renderOverlap() {
     })}
     `;
 
-    // 2) Multi-document assertions (the overlap itself)
+    // 2) Multi-document assertions (the overlap itself), with agreement/tension verdict
     const overlap = Array.isArray(report.overlap) ? report.overlap : [];
-    const ovRows = overlap.map(o => `
+    const ovRows = overlap.map(o => {
+        const verdict = String(o.verdict || "AGREEMENT").toUpperCase();
+        const verdictBadge = verdict === "TENSION"
+            ? `<span class="badge text-bg-warning" title="Same assertion, different obligation strength">⚠ Tension</span>`
+            : `<span class="badge text-bg-success" title="Documents agree">✓ Agreement</span>`;
+        const docsCol = (o.docs || []).map(d => {
+            const m = o.modality_by_doc?.[d];
+            const mTag = m ? ` <span class="badge text-bg-primary" style="font-size:0.6rem;">${escapeHtml(m.toLowerCase())}</span>` : "";
+            return `<span class="badge text-bg-info me-1">${escapeHtml(d)}${mTag}</span>`;
+        }).join("");
+        return `
       <tr>
         <td>${escapeHtml(o.source)}</td>
         <td class="text-muted">${escapeHtml(formatPredicateLabel(o.predicate))}</td>
         <td>${escapeHtml(o.target)}</td>
-        <td>${(o.docs || []).map(d => `<span class="badge text-bg-info me-1">${escapeHtml(d)}</span>`).join("")}</td>
-      </tr>
-    `);
+        <td>${verdictBadge}</td>
+        <td>${docsCol}</td>
+      </tr>`;
+    });
     el("compare-overlap-wrap").innerHTML = `
-      <div class="fw-semibold small text-muted mb-1">Assertions supported by multiple documents</div>
-      ${simpleTable(["Subject", "Predicate", "Object", "Documents"], ovRows, {
+      <div class="fw-semibold small text-muted mb-1">Assertions supported by multiple documents
+        <span class="text-muted fw-normal">— tension = same subject/relation/object but different obligation strength</span>
+      </div>
+      ${simpleTable(["Subject", "Predicate", "Object", "Verdict", "Documents (modality)"], ovRows, {
         emptyText: "No assertion is supported by more than one document yet.",
     })}
     `;
@@ -360,6 +373,8 @@ function exportOverlap() {
         Subject: o.source,
         Predicate: o.predicate,
         Object: o.target,
+        Verdict: o.verdict || "AGREEMENT",
+        Modalities: (o.modalities || []).join(", "),
         Documents: (o.docs || []).join(", "),
         Evidence: (o.records || []).map(r => `[${r.doc}] ${r.quality || r.chunk_excerpt || ""}`).join("\n"),
     }));

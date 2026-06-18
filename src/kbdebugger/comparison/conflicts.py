@@ -83,8 +83,10 @@ def find_conflict_candidates(
         edges = fetch_provenance_edges(graph, sources=sources)
     if canon is None:
         from .alignment import same_as_clusters
+        from .dimensions import dimension_canon_for_names
 
-        canon = same_as_clusters(graph)
+        names = {e.source for e in edges} | {e.target for e in edges}
+        canon = {**dimension_canon_for_names(names), **same_as_clusters(graph)}
 
     exclude_ids = exclude_ids or set()
 

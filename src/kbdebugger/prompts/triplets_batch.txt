@@ -24,6 +24,13 @@ Normative language (standards documents):
   - "shall not" / "must not" → "PROHIBITED"
   - no normative wording → "NONE"
 - Report the modality in the per-sentence "modality" output field.
+- Compound normative sentences: a single sentence may glue together more than one
+  claim with different strengths, e.g. "the system shall provide an explanation
+  that is accurate and may include visualizations". Emit a SEPARATE triplet for
+  each distinct claim (one for the obligation, one for the permission). For the
+  sentence-level "modality" field, report the STRONGEST modality present using the
+  priority PROHIBITED > MANDATORY > RECOMMENDED > OPTIONAL, so a mixed sentence is
+  never under-classified.
 
 Standard schema guidance:
 - Some input objects include a "standard_schema" field. Treat it as schema/type guidance only, not as entity-linking instructions.
