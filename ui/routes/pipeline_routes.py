@@ -117,6 +117,19 @@ def start_pipeline_run():
     if not keyword:
         return jsonify({"error": "Missing query param: keyword"}), 400
 
+    # Complete trustworthy-AI scan: the UI sends a sentinel; expand it to the
+    # full curated dimension list. A single keyword stays a one-element list.
+    ALL_DIMENSIONS = "__ALL_DIMENSIONS__"
+    if keyword == ALL_DIMENSIONS:
+        from ..services.search_keywords_service import load_search_keywords
+        dimensions = list(load_search_keywords())
+        if not dimensions:
+            return jsonify({"error": "No trustworthy-AI dimensions are configured for a complete scan."}), 400
+        keyword_label = "All dimensions"
+    else:
+        dimensions = [keyword]
+        keyword_label = keyword
+
     files = [f for f in request.files.getlist("documents") if f and f.filename]
     if not files:
         legacy = request.files.get("document")
@@ -133,7 +146,13 @@ def start_pipeline_run():
 
     def worker() -> None:
         try:
-            result = run_pipeline(job_id=job.job_id, file_paths=paths, keyword=keyword, cfg=cfg)
+            result = run_pipeline(
+                job_id=job.job_id,
+                file_paths=paths,
+                keyword=keyword_label,
+                keywords=dimensions,
+                cfg=cfg,
+            )
             JOB_STORE.set_done(job.job_id, result)
         except Exception as e:
             traceback.print_exc()

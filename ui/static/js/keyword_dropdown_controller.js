@@ -145,10 +145,11 @@ export async function initKeywordDropdown({
         return;
       }
 
-      // Complete scan: render the WHOLE graph from Neo4j. Running the pipeline
-      // across all dimensions is not wired yet, so keep upload gated for now.
+      // Complete scan: preview the WHOLE graph from Neo4j AND enable Run so the
+      // pipeline can extract across every dimension in one pass. Each quality is
+      // tagged with the dimension(s) it matches.
       if (chosen === ALL_DIMENSIONS) {
-        setHasKeywordSelected(false);
+        setHasKeywordSelected(true);  // allow upload + Run for a complete scan
         setLoading(true, {
           title: "Loading full graph…",
           subtitle: "Fetching all nodes and relationships from Neo4j.",

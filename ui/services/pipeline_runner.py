@@ -32,6 +32,12 @@ from kbdebugger.novelty.comparator import classify_qualities_novelty
 from ui.services.job_store import JOB_STORE, JobProgressStage
 from ui.services.json_sanitize import to_jsonable
 from ui.services.progress_callbacks import init_stage, make_job_progress_callback
+from ui.services.dimension_scan import (
+    assign_paragraph_dimensions,
+    attach_dimensions_to_results,
+    build_quality_dimensions,
+    dedup_qualities,
+)
 
 
 def _source_context_lookup(decomposer_log: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -89,6 +95,7 @@ def run_pipeline(
     file_paths: Sequence[Path],
     keyword: str,
     cfg: PipelineConfig,
+    keywords: Sequence[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Run Stage 2 end-to-end over one or more documents and return
@@ -117,6 +124,15 @@ def run_pipeline(
         raise ValueError("run_pipeline requires at least one document path.")
 
     num_docs = len(paths)
+
+    # Dimensions to scan: an explicit list (complete trustworthy-AI scan) or the
+    # single selected keyword. A paragraph/quality may match several dimensions.
+    dimensions = [d.strip() for d in (keywords if keywords else [keyword]) if d and str(d).strip()]
+    if not dimensions:
+        dimensions = [keyword]
+    # Preserve order, drop duplicates.
+    dimensions = list(dict.fromkeys(dimensions))
+    scan_mode = "complete" if len(dimensions) > 1 else "single"
 
     # ---------------------------
     # Stage 2a: Docling (per document, so provenance stays per-doc)
@@ -159,30 +175,69 @@ def run_pipeline(
     }
 
     # ---------------------------
-    # Stage 2b: KeyBERT filter (combined paragraph pool)
+    # Stage 2b: KeyBERT filter — per dimension, tagging each matched paragraph
     # ---------------------------
+    # We match paragraphs separately for every scanned dimension so each one
+    # carries dimension tags, but we only keep the UNION of matched paragraphs
+    # (deduped) — the expensive decomposition runs once over that union.
     total_par = len(all_paragraphs)
+    num_dims = len(dimensions)
     init_stage(
         job_id=job_id,
         stage="KeyBERT",
-        message=f"🔎 Scanning {total_par} paragraphs from {num_docs} document(s) for keyword '{keyword}'...",
+        message=(
+            f"🔎 Scanning {total_par} paragraphs from {num_docs} document(s) "
+            f"for {num_dims} dimension(s): {', '.join(dimensions)}..."
+        ),
         current=0,
-        total=total_par,
+        total=num_dims,
     )
 
-    keybert_result, keybert_log = filter_paragraphs_by_keyword(
-        paragraphs=all_paragraphs,
-        search_keyword=keyword,
-        config=cfg.keybert,
-        synonyms_enabled=cfg.keyword_synonyms_enabled,
-        synonym_cache_enabled=cfg.keyword_synonym_cache_enabled,
-        synonym_cache_path=cfg.keyword_synonym_cache_path,
-        synonym_defaults_path=cfg.keyword_synonym_defaults_path,
-        synonym_cache_write=cfg.keyword_synonym_cache_write,
-        progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
-    )
+    matched_docs_by_dimension: Dict[str, List[Document]] = {}
+    keybert_logs_by_dimension: Dict[str, Any] = {}
+    for dim_idx, dimension in enumerate(dimensions, start=1):
+        init_stage(
+            job_id=job_id,
+            stage="KeyBERT",
+            message=f"🔎 Matching paragraphs for dimension {dim_idx}/{num_dims}: '{dimension}'...",
+            current=dim_idx - 1,
+            total=num_dims,
+        )
+        keybert_result, keybert_log = filter_paragraphs_by_keyword(
+            paragraphs=all_paragraphs,
+            search_keyword=dimension,
+            config=cfg.keybert,
+            synonyms_enabled=cfg.keyword_synonyms_enabled,
+            synonym_cache_enabled=cfg.keyword_synonym_cache_enabled,
+            synonym_cache_path=cfg.keyword_synonym_cache_path,
+            synonym_defaults_path=cfg.keyword_synonym_defaults_path,
+            synonym_cache_write=cfg.keyword_synonym_cache_write,
+            progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
+        )
+        matched_docs_by_dimension[dimension] = keybert_result.matched_docs
+        keybert_logs_by_dimension[dimension] = keybert_log
 
-    matched_docs = keybert_result.matched_docs
+    # Dedup matched paragraphs across dimensions; tag each with its dimension(s).
+    matched_indices, dims_by_paragraph_index = assign_paragraph_dimensions(
+        all_paragraphs, matched_docs_by_dimension
+    )
+    matched_docs = [all_paragraphs[i] for i in matched_indices]
+    # Map decomposer input position -> dimension set (decompose receives
+    # matched_docs in this exact order).
+    dims_by_decompose_index = {
+        pos: dims_by_paragraph_index.get(orig_idx, set())
+        for pos, orig_idx in enumerate(matched_indices)
+    }
+
+    keybert_log = {
+        "dimensions": dimensions,
+        "scan_mode": scan_mode,
+        "matched_paragraphs": len(matched_docs),
+        "per_dimension": {
+            dim: len(matched_docs_by_dimension.get(dim, [])) for dim in dimensions
+        },
+        "logs": keybert_logs_by_dimension,
+    }
 
     # ---------------------------
     # Stage 2c: LLM Decomposer
@@ -208,6 +263,16 @@ def run_pipeline(
     )
     quality_source_lookup = _source_context_lookup(decomposer_log)
 
+    # Tag each quality with the dimension(s) of its source paragraph, then dedup
+    # the quality pool so similarity / novelty / triplet extraction never see the
+    # same sentence twice (cost control — a quality shared by 3 dimensions is
+    # processed once, carrying all 3 tags).
+    quality_dimensions = build_quality_dimensions(
+        decomposer_log.get("quality_sources", []),
+        dims_by_decompose_index,
+    )
+    qualities = dedup_qualities(qualities)
+
     # ---------------------------------------------------------------------
     # Stage 3: Quality-to-Subgraph similarity filter (needs KG relations)
     # ---------------------------------------------------------------------
@@ -219,22 +284,42 @@ def run_pipeline(
         total=3,  # 1. 📚 Building KG vector index, 2. 📊 Running similarity search, 3. ✍️ Finalizing logs
     )
 
-    kg_relations = retrieve_keyword_subgraph(
-        keyword=keyword,
-        limit_per_pattern=cfg.kg_limit_per_pattern,
-    )
+    # Combined KG subgraph across all scanned dimensions (deduped).
+    kg_relations = _combined_keyword_subgraph(dimensions, cfg)
 
-    # If kg_relations is empty, SubgraphSimilarityFilter.build_index() will crash
     if not kg_relations:
-        raise ValueError(f"No KG relations retrieved for keyword {keyword!r}.")
-
-    (kept, dropped), subgraph_similarity_log = filter_qualities_by_subgraph_similarity(
-        kg_relations=kg_relations,
-        qualities=qualities,
-        cfg=cfg.vector_similarity,  # assumes PipelineConfig has vector_similarity field
-        pretty_print=False,
-        progress=make_job_progress_callback(job_id=job_id, stage="SubgraphSimilarity"),
-    )
+        # No KG reference for these dimension(s) yet (e.g. a brand-new dimension,
+        # or a fresh graph). Skip the similarity filter instead of failing and
+        # keep every quality — downstream novelty will treat them as NEW since
+        # they have no neighbors. This is what lets a never-before-seen
+        # dimension still produce reviewable qualities, and keeps a complete
+        # scan from aborting on the first empty dimension.
+        kept = [{"quality": q, "max_score": 0.0, "neighbors": []} for q in qualities]
+        dropped = []
+        subgraph_similarity_log = {
+            "skipped": True,
+            "reason": (
+                "No KG relations for the selected dimension(s); similarity filter "
+                "skipped and all qualities kept for novelty review."
+            ),
+            "kept": len(kept),
+            "dropped": 0,
+        }
+        JOB_STORE.update_progress(
+            job_id,
+            stage="SubgraphSimilarity",
+            message="🧠 No KG reference for these dimension(s) — keeping all qualities (all treated as NEW).",
+            current=3,
+            total=3,
+        )
+    else:
+        (kept, dropped), subgraph_similarity_log = filter_qualities_by_subgraph_similarity(
+            kg_relations=kg_relations,
+            qualities=qualities,
+            cfg=cfg.vector_similarity,  # assumes PipelineConfig has vector_similarity field
+            pretty_print=False,
+            progress=make_job_progress_callback(job_id=job_id, stage="SubgraphSimilarity"),
+        )
 
     # ---------------------------------------------------------------------
     # Stage 4: Novelty decision (LLM comparator)
@@ -268,6 +353,8 @@ def run_pipeline(
     novelty_results = novelty_log.get("results")
     if isinstance(novelty_results, list):
         _attach_source_context(novelty_results, quality_source_lookup)
+        # Tag each reviewed quality with the dimension(s) it belongs to.
+        attach_dimensions_to_results(novelty_results, quality_dimensions)
 
 
     response: Dict[JobProgressStage | str, Dict] = {
@@ -287,6 +374,41 @@ def run_pipeline(
         "source_names": source_names,
         "num_documents": num_docs,
         "keyword": keyword,
+        "dimensions": dimensions,
+        "scan_mode": scan_mode,
     }
 
     return to_jsonable(response)
+
+
+def _combined_keyword_subgraph(dimensions: Sequence[str], cfg: PipelineConfig) -> list:
+    """
+    Retrieve and union the KG subgraphs for every scanned dimension.
+
+    Relations are deduped on (source, predicate, target) so a relation shared by
+    several dimensions is only embedded once by the similarity filter.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    combined: list = []
+    for dimension in dimensions:
+        try:
+            relations = retrieve_keyword_subgraph(
+                keyword=dimension,
+                limit_per_pattern=cfg.kg_limit_per_pattern,
+            )
+        except Exception:
+            relations = []
+        for rel in relations or []:
+            edge = rel.get("edge", {}) if isinstance(rel, dict) else {}
+            source = (rel.get("source") or {}) if isinstance(rel, dict) else {}
+            target = (rel.get("target") or {}) if isinstance(rel, dict) else {}
+            key = (
+                str(source.get("label") or source.get("id") or ""),
+                str(edge.get("label") or ""),
+                str(target.get("label") or target.get("id") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            combined.append(rel)
+    return combined

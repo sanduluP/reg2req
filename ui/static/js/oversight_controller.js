@@ -137,6 +137,7 @@ function renderTable({ container, items, decisionKey, page }) {
           </button>
           <span class="flex-grow-1">${escapeHtml(r.quality)}</span>
         </div>
+        ${dimensionBadges(r)}
       </td>
       <td>
         <span class="badge text-bg-secondary">${formatSimilarity(r.max_score)}</span>
@@ -265,6 +266,19 @@ function formatSimilarity(score) {
   return Number.isFinite(score) ? score.toFixed(2) : "n/a";
 }
 
+/**
+ * Render the dimension tag(s) a quality belongs to as small pills. A single
+ * quality can match several trustworthy-AI dimensions (complete scan).
+ */
+function dimensionBadges(result) {
+  const dims = Array.isArray(result?.dimensions) ? result.dimensions.filter(Boolean) : [];
+  if (!dims.length) return "";
+  const pills = dims
+    .map(d => `<span class="badge rounded-pill text-bg-info" style="font-weight:500;">${escapeHtml(d)}</span>`)
+    .join(" ");
+  return `<div class="d-flex flex-wrap gap-1 mt-1 ms-4"><i class="bi bi-tag text-muted" style="font-size:0.75rem;"></i>${pills}</div>`;
+}
+
 function sourcePopoverTitle(result) {
   const rawIndex = sourceDocIndex(result);
   if (Number.isInteger(rawIndex)) {
@@ -307,6 +321,7 @@ function toTripletExtractionItems(results) {
       decision: r?.decision ?? null,
       max_score: r?.max_score ?? null,
       matched_neighbor_sentence: r?.matched_neighbor_sentence ?? null,
+      dimensions: Array.isArray(r?.dimensions) ? r.dimensions : [],
     }))
     .filter(item => item.quality);
 }

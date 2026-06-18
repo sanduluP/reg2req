@@ -23,9 +23,10 @@ def test_run_route_accepts_multiple_documents(monkeypatch):
 
     captured = {}
 
-    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg):
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None):
         captured["file_names"] = [Path(p).name for p in file_paths]
         captured["keyword"] = keyword
+        captured["keywords"] = keywords
         return {"_meta": {"source_names": captured["file_names"], "keyword": keyword}}
 
     monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
@@ -60,8 +61,9 @@ def test_run_route_accepts_legacy_single_document_field(monkeypatch):
 
     captured = {}
 
-    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg):
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None):
         captured["file_names"] = [Path(p).name for p in file_paths]
+        captured["keywords"] = keywords
         return {"_meta": {}}
 
     monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
