@@ -118,12 +118,10 @@ function activeSources() {
 /* ======================== Source selector ======================== */
 
 async function loadSources() {
-    const wrap = el("compare-sources-wrap");
-    const hint = el("compare-sources-hint");
-    const banner = el("compare-no-data-banner");
-    if (wrap) wrap.innerHTML = `<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</span>`;
+    const loadingSpinner = el("compare-sources-loading");
+    if (loadingSpinner) loadingSpinner.classList.remove("d-none");
 
-    // 1) Neo4j sources
+    // 1) Neo4j sources — always try, even before any pipeline run
     let neo4jSources = [];
     try {
         const data = await fetchComparisonSources();
@@ -132,102 +130,148 @@ async function loadSources() {
         console.warn("Could not fetch Neo4j sources:", e);
     }
 
-    // 2) Session sources (documents from current pipeline run, not yet pushed to Neo4j)
+    // 2) Session sources — documents from the current pipeline run, before Neo4j submission
     const ctx = getRunContext();
     const sessionNames = Array.isArray(ctx?.source_names)
         ? ctx.source_names
         : (ctx?.source_name ? [ctx.source_name] : []);
 
-    // Combine: session sources not already in Neo4j are tagged "session"
     const neo4jSet = new Set(neo4jSources);
-    const combined = [
-        ...neo4jSources.map(n => ({ name: n, type: "graph" })),
-        ...sessionNames.filter(n => !neo4jSet.has(n)).map(n => ({ name: n, type: "session" })),
-    ];
+    // Session docs not yet in the graph get their own section
+    const sessionOnly = sessionNames.filter(n => !neo4jSet.has(n));
 
-    state.allSources = combined;
+    // Combined for filter logic: graph first, then session-only
+    state.allSources = [
+        ...neo4jSources.map(n => ({ name: n, type: "graph" })),
+        ...sessionOnly.map(n => ({ name: n, type: "session" })),
+    ];
     state.selectedSources = null; // default: all
 
-    // Show/hide the "no data" workflow guide
-    if (banner) banner.classList.toggle("d-none", combined.length > 0);
+    _renderGraphSourceSection(neo4jSources);
+    _renderSessionSourceSection(sessionOnly, neo4jSources.length > 0);
 
-    renderSourceChips();
-
-    // Hint text below the chips
-    const hasSession = sessionNames.some(n => !neo4jSet.has(n));
-    if (hint) {
-        if (combined.length === 0) {
-            hint.textContent = "";
-        } else if (hasSession) {
-            hint.innerHTML =
-                `<i class="bi bi-info-circle me-1"></i>` +
-                `Orange sources are from the current session and not yet in Neo4j. ` +
-                `Go to <em>Review &amp; extract</em> → Submit to KG to include them in graph analysis.`;
-        } else {
-            hint.textContent = "";
-        }
-    }
+    if (loadingSpinner) loadingSpinner.classList.add("d-none");
 }
 
-function renderSourceChips() {
-    const wrap = el("compare-sources-wrap");
+function _renderGraphSourceSection(neo4jSources) {
+    const wrap = el("compare-graph-sources-wrap");
+    const hint = el("compare-graph-sources-hint");
+    const count = el("compare-graph-count");
+
     if (!wrap) return;
 
-    const { allSources, selectedSources } = state;
+    if (count) count.textContent = neo4jSources.length ? String(neo4jSources.length) : "";
 
-    if (allSources.length === 0) {
-        wrap.innerHTML = `<span class="text-muted small">No sources available yet.</span>`;
+    if (neo4jSources.length === 0) {
+        wrap.innerHTML = `<span class="text-muted small">No knowledge in graph yet.</span>`;
+        if (hint) hint.innerHTML =
+            `Run the pipeline on PDFs, then <em>Submit to KG</em> — ` +
+            `or use <em>Initialize graph</em> (toolbar step 1) to load baseline knowledge.`;
         return;
     }
 
     wrap.innerHTML = "";
-    for (const src of allSources) {
-        const isSelected = selectedSources === null || selectedSources.has(src.name);
-        const isSession = src.type === "session";
+    if (hint) hint.textContent = "Click a source to toggle it in/out of the analysis.";
 
-        const btn = document.createElement("button");
-        btn.type = "button";
+    for (const name of neo4jSources) {
+        wrap.appendChild(_makeChip(name, "graph"));
+    }
+}
+
+function _renderSessionSourceSection(sessionOnly, graphHasData) {
+    const wrap = el("compare-session-sources-wrap");
+    const hint = el("compare-session-sources-hint");
+    const count = el("compare-session-count");
+
+    if (!wrap) return;
+
+    if (count) count.textContent = sessionOnly.length ? String(sessionOnly.length) : "";
+
+    if (sessionOnly.length === 0) {
+        const ctx = getRunContext();
+        const hasSession = ctx?.source_names?.length > 0 || ctx?.source_name;
+        if (hasSession) {
+            // Session docs exist but ALL are already in the graph
+            wrap.innerHTML = `<span class="text-muted small">All session docs already in graph.</span>`;
+            if (hint) hint.textContent = "";
+        } else {
+            wrap.innerHTML = `<span class="text-muted small">No active session.</span>`;
+            if (hint) hint.textContent = "Run the pipeline to see current documents here.";
+        }
+        return;
+    }
+
+    wrap.innerHTML = "";
+    for (const name of sessionOnly) {
+        wrap.appendChild(_makeChip(name, "session"));
+    }
+    if (hint) hint.innerHTML =
+        `Not yet in Neo4j — go to <em>Review &amp; extract</em> → Submit to KG to persist.`;
+}
+
+function _makeChip(name, type) {
+    const isSelected = state.selectedSources === null || state.selectedSources.has(name);
+    const isSession = type === "session";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.sourceName = name;
+    btn.dataset.sourceType = type;
+    btn.className = [
+        "btn btn-sm py-0 px-2",
+        isSelected
+            ? (isSession ? "btn-warning" : "btn-primary")
+            : "btn-outline-secondary",
+    ].join(" ");
+    btn.style.cssText = "font-size:0.72rem; border-radius:999px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+    btn.title = `${isSession ? "Session" : "Graph"} source: ${name}`;
+    btn.textContent = name;
+
+    btn.addEventListener("click", () => {
+        if (state.selectedSources === null) {
+            state.selectedSources = new Set(state.allSources.map(s => s.name));
+        }
+        if (state.selectedSources.has(name)) {
+            state.selectedSources.delete(name);
+        } else {
+            state.selectedSources.add(name);
+        }
+        if (state.selectedSources.size === state.allSources.length) {
+            state.selectedSources = null;
+        }
+        _updateChipStyles();
+    });
+
+    return btn;
+}
+
+function _updateChipStyles() {
+    // Update visual state without re-rendering the whole list
+    const allChips = document.querySelectorAll(
+        "#compare-graph-sources-wrap button[data-source-name], " +
+        "#compare-session-sources-wrap button[data-source-name]"
+    );
+    allChips.forEach(btn => {
+        const name = btn.dataset.sourceName;
+        const isSession = btn.dataset.sourceType === "session";
+        const isSelected = state.selectedSources === null || state.selectedSources.has(name);
         btn.className = [
             "btn btn-sm py-0 px-2",
             isSelected
                 ? (isSession ? "btn-warning" : "btn-primary")
                 : "btn-outline-secondary",
         ].join(" ");
-        btn.style.cssText = "font-size:0.72rem; border-radius:999px;";
-        btn.title = isSession
-            ? `Session source (not yet in Neo4j): ${src.name}`
-            : `Graph source: ${src.name}`;
-        btn.textContent = src.name;
-
-        btn.addEventListener("click", () => {
-            // First click on a specific source when "all" → switch to subset mode
-            if (state.selectedSources === null) {
-                state.selectedSources = new Set(state.allSources.map(s => s.name));
-            }
-            if (state.selectedSources.has(src.name)) {
-                state.selectedSources.delete(src.name);
-            } else {
-                state.selectedSources.add(src.name);
-            }
-            // If all sources are selected again → revert to null (no filter)
-            if (state.selectedSources.size === state.allSources.length) {
-                state.selectedSources = null;
-            }
-            renderSourceChips();
-        });
-
-        wrap.appendChild(btn);
-    }
+    });
 }
 
 function selectAllSources() {
     state.selectedSources = null;
-    renderSourceChips();
+    _updateChipStyles();
 }
 
 function clearAllSources() {
     state.selectedSources = new Set();
-    renderSourceChips();
+    _updateChipStyles();
 }
 
 /* ------------------------------ Overlap ------------------------------ */
@@ -660,7 +704,10 @@ export function wireComparisonView() {
     el("compare-ambiguity-refresh")?.addEventListener("click", refreshAmbiguity);
     el("compare-ambiguity-export")?.addEventListener("click", exportAmbiguity);
 
-    // Lazy-load sources + overlap the first time the Compare tab is opened.
+    // Load sources immediately on app start (Neo4j + any saved session state)
+    loadSources();
+
+    // Re-load when the Compare tab is shown (picks up changes since last visit)
     el("compare-view-tab")?.addEventListener("shown.bs.tab", () => {
         loadSources();
         if (!state.overlapLoaded) {
@@ -668,4 +715,12 @@ export function wireComparisonView() {
             refreshRecordedConflicts();
         }
     });
+}
+
+/**
+ * Call this after a pipeline run completes so the session section
+ * immediately reflects the newly processed documents.
+ */
+export function refreshComparisonSources() {
+    loadSources();
 }
