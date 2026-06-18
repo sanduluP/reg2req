@@ -127,11 +127,15 @@ def vague_language_report(
     return rows
 
 
-def build_ambiguity_report(graph: Optional[Any] = None) -> dict[str, Any]:
+def build_ambiguity_report(
+    graph: Optional[Any] = None,
+    *,
+    sources: Optional[list[str]] = None,
+) -> dict[str, Any]:
     """Full ambiguity report for the Compare tab."""
     from .alignment import rejected_near_synonyms
 
-    edges = fetch_provenance_edges(graph)
+    edges = fetch_provenance_edges(graph, sources=sources)
 
     return {
         "undefined_normative_terms": undefined_normative_terms(edges),

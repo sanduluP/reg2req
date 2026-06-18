@@ -33,7 +33,11 @@ def _parse_records(raw: Any) -> tuple[dict[str, Any], ...]:
     return tuple(parsed)
 
 
-def fetch_provenance_edges(graph: Optional[Any] = None) -> list[ProvenanceEdge]:
+def fetch_provenance_edges(
+    graph: Optional[Any] = None,
+    *,
+    sources: Optional[list[str]] = None,
+) -> list[ProvenanceEdge]:
     """
     Fetch every relationship that carries provenance records and parse the
     JSON entries. This is the single read query all comparison reports
@@ -81,6 +85,10 @@ def fetch_provenance_edges(graph: Optional[Any] = None) -> list[ProvenanceEdge]:
                 records=records,
             )
         )
+
+    if sources:
+        sources_set = set(sources)
+        edges = [e for e in edges if sources_set.intersection(e.docs)]
 
     return edges
 

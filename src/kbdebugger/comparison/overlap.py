@@ -102,7 +102,11 @@ def concept_coverage(
     return {"documents": ordered_docs, "rows": rows[:max_concepts]}
 
 
-def build_overlap_report(graph: Optional[Any] = None) -> dict[str, Any]:
+def build_overlap_report(
+    graph: Optional[Any] = None,
+    *,
+    sources: Optional[list[str]] = None,
+) -> dict[str, Any]:
     """
     Full overlap/coverage report for the Compare tab.
 
@@ -112,7 +116,7 @@ def build_overlap_report(graph: Optional[Any] = None) -> dict[str, Any]:
     """
     from .alignment import same_as_clusters
 
-    edges = fetch_provenance_edges(graph)
+    edges = fetch_provenance_edges(graph, sources=sources)
     canon = same_as_clusters(graph)
 
     return {

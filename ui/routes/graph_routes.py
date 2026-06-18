@@ -97,6 +97,21 @@ def api_seed_graph():
     return jsonify({"job_id": job.job_id})
 
 
+@graph_bp.get("/full")
+def api_full_graph():
+    from kbdebugger.graph.api import retrieve_full_graph_cytoscape
+
+    """
+    Retrieve the entire knowledge graph (all nodes + relationships) as a
+    Cytoscape payload. Used by the "Complete scan (all dimensions)" option.
+    """
+    try:
+        payload = retrieve_full_graph_cytoscape()
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @graph_bp.get("/subgraph")
 def api_subgraph():
     from kbdebugger.graph.api import retrieve_keyword_subgraph_cytoscape

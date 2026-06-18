@@ -68,6 +68,7 @@ def find_conflict_candidates(
     edges: Optional[Sequence[ProvenanceEdge]] = None,
     canon: Optional[Mapping[str, str]] = None,
     exclude_ids: Optional[set[str]] = None,
+    sources: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """
     Generate typed cross-document conflict candidates from the provenance layer.
@@ -79,7 +80,7 @@ def find_conflict_candidates(
     - VALUE_CONFLICT:      same subject+value-predicate, different values per doc
     """
     if edges is None:
-        edges = fetch_provenance_edges(graph)
+        edges = fetch_provenance_edges(graph, sources=sources)
     if canon is None:
         from .alignment import same_as_clusters
 

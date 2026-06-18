@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KB Extractor for tAI</title>
+    <title>Guidance2Requirement</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
@@ -14,10 +14,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
-
-    <!-- <link rel="icon" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
-    <link rel="icon" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16.png') }}"> -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}" sizes="any">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
 </head>
@@ -27,10 +25,10 @@
         <section class="card p-2 pipeline-toolbar-card">
             <div class="pipeline-header">
                 <div class="pipeline-title">
-                    <i class="bi bi-diagram-3 me-1"></i> KBDebugger · Trustworthy-AI Knowledge Extractor
+                    <i class="bi bi-signpost-split me-1"></i> Guidance2Requirement
                 </div>
                 <div class="pipeline-subtitle">
-                    Extract, review and compare trustworthy-AI knowledge from documents into an auditable Neo4j graph.
+                    Turn trustworthy-AI guidance documents into structured, comparable requirements in an auditable knowledge graph.
                 </div>
             </div>
 
@@ -77,7 +75,8 @@
                 <!-- Run -->
                 <div class="pipeline-step pipeline-actions">
                     <div class="step-label">&nbsp;</div>
-                    <button id="pipeline-run-btn" class="btn btn-success btn-sm w-100" type="button" disabled>
+                    <button id="pipeline-run-btn" class="btn btn-success btn-sm" type="button" disabled
+                        style="min-width: 104px;">
                         <span class="pipeline-run-icon me-1" aria-hidden="true">
                             <i class="bi bi-play-fill"></i>
                         </span>
@@ -130,21 +129,21 @@
                         <button class="nav-link active" id="graph-view-tab" data-bs-toggle="tab"
                             data-bs-target="#graph-view" type="button" role="tab" aria-controls="graph-view"
                             aria-selected="true">
-                            Graph
+                            <i class="bi bi-diagram-3 me-1"></i> Knowledge graph
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="oversight-view-tab" data-bs-toggle="tab"
                             data-bs-target="#oversight-view" type="button" role="tab" aria-controls="oversight-view"
                             aria-selected="false">
-                            Oversight
+                            <i class="bi bi-check2-square me-1"></i> Review &amp; extract
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="compare-view-tab" data-bs-toggle="tab"
                             data-bs-target="#compare-view" type="button" role="tab" aria-controls="compare-view"
                             aria-selected="false">
-                            Compare
+                            <i class="bi bi-columns-gap me-1"></i> Compare documents
                         </button>
                     </li>
                 </ul>
@@ -361,6 +360,26 @@
                     <div class="tab-pane fade h-100" id="compare-view" role="tabpanel"
                         aria-labelledby="compare-view-tab" style="min-height:0; overflow:auto;">
                         <section class="p-2 p-md-2 bg-white rounded-3 border">
+
+                            <!-- Source selector: choose which provenance sources to analyse -->
+                            <div id="compare-source-panel" class="mb-2 rounded border px-2 py-2" style="background:#f8fafc;">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-1 mb-1">
+                                    <span class="fw-semibold small text-secondary">
+                                        <i class="bi bi-funnel me-1"></i>Sources to compare
+                                    </span>
+                                    <div class="d-flex gap-1 align-items-center">
+                                        <button id="compare-sources-select-all" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.72rem;">All</button>
+                                        <button id="compare-sources-clear" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.72rem;">None</button>
+                                        <button id="compare-sources-refresh" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Reload sources from Neo4j" style="font-size:0.72rem;">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="compare-sources-wrap" class="d-flex flex-wrap gap-1">
+                                    <span class="text-muted small">Loading…</span>
+                                </div>
+                                <div id="compare-sources-hint" class="text-muted mt-1" style="font-size:0.68rem;"></div>
+                            </div>
 
                             <ul class="nav nav-pills nav-sm mb-2 gap-1" id="compare-inner-tabs" role="tablist">
                                 <li class="nav-item" role="presentation">

@@ -91,6 +91,41 @@ def retrieve_keyword_subgraph_cytoscape(
     return graph_relations_to_cytoscape(relations)
 
 
+def retrieve_full_graph_cytoscape(*, limit: int = 5000) -> CytoscapeGraphPayload:
+    """
+    Retrieve the ENTIRE knowledge graph (all relationships) as Cytoscape-ready
+    elements — used by the "Complete scan (all dimensions)" view.
+
+    Parameters
+    ----------
+    limit:
+        Safety cap on the number of relationships returned, to avoid rendering
+        a pathologically large graph in the browser.
+
+    Returns
+    -------
+    CytoscapeGraphPayload
+        Cytoscape.js compatible graph payload for the whole graph.
+    """
+    graph = get_graph()
+    relations = graph.query_relations(
+        """
+        MATCH (n:Node)-[r]->(m:Node)
+        RETURN
+            n.name AS source,
+            m.name AS target,
+            type(r) AS predicate,
+            properties(r) AS props,
+            elementId(n) AS source_id,
+            elementId(m) AS target_id,
+            elementId(r) AS rel_id
+        LIMIT $limit
+        """,
+        {"limit": int(limit)},
+    )
+    return graph_relations_to_cytoscape(relations)
+
+
 def upsert_extracted_triplets(
     *,
     extractions: Sequence[ExtractionResult],

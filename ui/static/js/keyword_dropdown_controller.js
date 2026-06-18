@@ -10,11 +10,10 @@
  * by the dropdown's state (selected keyword + loading state).
  */
 
-import { getSearchKeywords, getSubgraph } from "./graph_client.js";
+import { getSearchKeywords, getSubgraph, getFullGraph } from "./graph_client.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js"
 import { showGlobalLoading, hideGlobalLoading } from "./modals/global_loading_modal.js";
 import { setLastSubgraphPayload } from "./state/graph_state.js";
-import { showToast } from "./toast.js";
 
 let currentSubgraphAbort = null;
 
@@ -146,15 +145,20 @@ export async function initKeywordDropdown({
         return;
       }
 
-      // Complete-scan is a UI preview for now: acknowledge the choice but keep
-      // the run gated until the scan-all backend path is wired.
+      // Complete scan: render the WHOLE graph from Neo4j. Running the pipeline
+      // across all dimensions is not wired yet, so keep upload gated for now.
       if (chosen === ALL_DIMENSIONS) {
         setHasKeywordSelected(false);
-        showToast({
-          type: "info",
-          title: "Complete scan",
-          message: "Scanning all trustworthy-AI dimensions is coming soon — pick a single focus area to run now.",
+        setLoading(true, {
+          title: "Loading full graph…",
+          subtitle: "Fetching all nodes and relationships from Neo4j.",
         });
+        try {
+          await fetchAndRenderFullGraph(onSubgraphFetch);
+          switchToTopLevelTab({ tab: TopLevelTabs.GRAPH });
+        } finally {
+          setLoading(false);
+        }
         return;
       }
 
@@ -204,12 +208,36 @@ async function fetchAndRenderSubgraph(keyword, onSubgraphFetch) {
 
     // ✅ cache it for export
     setLastSubgraphPayload(subgraphPayload);
-    
+
     onSubgraphFetch(subgraphPayload);
   } catch (err) {
     if (err?.name === "AbortError") return;
     console.error(err);
     alert(`Subgraph error: ${err.message}`);
+  } finally {
+    currentSubgraphAbort = null;
+  }
+}
+
+/**
+ * Fetch the entire graph (all nodes + relationships) and render it.
+ * Used by the "Complete scan (all dimensions)" option.
+ *
+ * @param {Function} onSubgraphFetch
+ */
+async function fetchAndRenderFullGraph(onSubgraphFetch) {
+  try {
+    if (currentSubgraphAbort) currentSubgraphAbort.abort();
+    currentSubgraphAbort = new AbortController();
+
+    const payload = await getFullGraph({ signal: currentSubgraphAbort.signal });
+
+    setLastSubgraphPayload(payload);
+    onSubgraphFetch(payload);
+  } catch (err) {
+    if (err?.name === "AbortError") return;
+    console.error(err);
+    alert(`Full graph error: ${err.message}`);
   } finally {
     currentSubgraphAbort = null;
   }

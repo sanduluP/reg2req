@@ -2,6 +2,7 @@
  * Compare tab controller
  * ----------------------
  * Cross-document analysis views over the KG provenance layer:
+ * - Source selector: pick which provenance sources to analyse
  * - Overlap & Coverage: per-document contribution, multi-doc assertions, concept matrix
  * - Alignment: SAME_AS candidate review (accept/reject)
  * - Conflicts: typed candidates + LLM verdicts, accept/dismiss into (:Conflict) nodes
@@ -12,6 +13,7 @@
  */
 
 import {
+    fetchComparisonSources,
     fetchOverlapReport,
     startAlignmentScan,
     postAlignmentDecision,
@@ -20,6 +22,7 @@ import {
     fetchRecordedConflicts,
     fetchAmbiguityReport,
 } from "./comparison_client.js";
+import { getRunContext } from "./state/oversight_state.js";
 import { getJobStatus } from "./pipeline_client.js";
 import { showToast } from "./toast.js";
 import { exportRowsAsXlsx } from "./utils/export_utils.js";
@@ -31,6 +34,10 @@ const state = {
     conflicts: [],        // current conflict candidates
     ambiguity: null,      // last ambiguity report
     overlapLoaded: false,
+
+    // Source selector
+    allSources: [],       // [{name, type}]  type = "graph" | "session"
+    selectedSources: null, // null = all; Set<string> = subset
 };
 
 /* ------------------------------ helpers ------------------------------ */
@@ -99,18 +106,138 @@ function conflictTypeLabel(type) {
     return t || "Unknown";
 }
 
+/**
+ * Return the active source filter as an array, or null for "all".
+ */
+function activeSources() {
+    if (!state.selectedSources) return null;
+    const arr = [...state.selectedSources];
+    return arr.length === 0 ? [] : arr;
+}
+
+/* ======================== Source selector ======================== */
+
+async function loadSources() {
+    const wrap = el("compare-sources-wrap");
+    const hint = el("compare-sources-hint");
+    if (wrap) wrap.innerHTML = `<span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</span>`;
+
+    // 1) Neo4j sources
+    let neo4jSources = [];
+    try {
+        const data = await fetchComparisonSources();
+        neo4jSources = Array.isArray(data.neo4j_sources) ? data.neo4j_sources : [];
+    } catch (e) {
+        console.warn("Could not fetch Neo4j sources:", e);
+    }
+
+    // 2) Session sources (documents from current pipeline run, not yet pushed to Neo4j)
+    const ctx = getRunContext();
+    const sessionNames = Array.isArray(ctx?.source_names) ? ctx.source_names : (ctx?.source_name ? [ctx.source_name] : []);
+
+    // Combine: session sources that are NOT already in Neo4j are tagged "session"
+    const neo4jSet = new Set(neo4jSources);
+    const combined = [
+        ...neo4jSources.map(n => ({ name: n, type: "graph" })),
+        ...sessionNames.filter(n => !neo4jSet.has(n)).map(n => ({ name: n, type: "session" })),
+    ];
+
+    state.allSources = combined;
+
+    // Default: all selected (null = all)
+    state.selectedSources = null;
+
+    renderSourceChips();
+
+    // Hint text
+    const hasSession = sessionNames.some(n => !neo4jSet.has(n));
+    if (hint) {
+        if (combined.length === 0) {
+            hint.textContent = "No sources found. Run the pipeline and submit triplets first.";
+        } else if (hasSession) {
+            hint.innerHTML =
+                `<i class="bi bi-info-circle me-1"></i>` +
+                `Orange sources are from the current session and not yet in Neo4j. ` +
+                `Go to <em>Review &amp; extract</em> → Submit to KG to include them in graph analysis.`;
+        } else {
+            hint.textContent = "";
+        }
+    }
+}
+
+function renderSourceChips() {
+    const wrap = el("compare-sources-wrap");
+    if (!wrap) return;
+
+    const { allSources, selectedSources } = state;
+
+    if (allSources.length === 0) {
+        wrap.innerHTML = `<span class="text-muted small">No sources available yet.</span>`;
+        return;
+    }
+
+    wrap.innerHTML = "";
+    for (const src of allSources) {
+        const isSelected = selectedSources === null || selectedSources.has(src.name);
+        const isSession = src.type === "session";
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = [
+            "btn btn-sm py-0 px-2",
+            isSelected
+                ? (isSession ? "btn-warning" : "btn-primary")
+                : "btn-outline-secondary",
+        ].join(" ");
+        btn.style.cssText = "font-size:0.72rem; border-radius:999px;";
+        btn.title = isSession
+            ? `Session source (not yet in Neo4j): ${src.name}`
+            : `Graph source: ${src.name}`;
+        btn.textContent = src.name;
+
+        btn.addEventListener("click", () => {
+            // First click on a specific source when "all" → switch to subset mode
+            if (state.selectedSources === null) {
+                state.selectedSources = new Set(state.allSources.map(s => s.name));
+            }
+            if (state.selectedSources.has(src.name)) {
+                state.selectedSources.delete(src.name);
+            } else {
+                state.selectedSources.add(src.name);
+            }
+            // If all sources are selected again → revert to null (no filter)
+            if (state.selectedSources.size === state.allSources.length) {
+                state.selectedSources = null;
+            }
+            renderSourceChips();
+        });
+
+        wrap.appendChild(btn);
+    }
+}
+
+function selectAllSources() {
+    state.selectedSources = null;
+    renderSourceChips();
+}
+
+function clearAllSources() {
+    state.selectedSources = new Set();
+    renderSourceChips();
+}
+
 /* ------------------------------ Overlap ------------------------------ */
 
 async function refreshOverlap() {
     setStatus("compare-overlap-status", "Loading overlap report...");
+    const sources = activeSources();
     try {
-        state.overlap = await fetchOverlapReport();
+        state.overlap = await fetchOverlapReport({ sources });
         state.overlapLoaded = true;
         renderOverlap();
-        setStatus(
-            "compare-overlap-status",
-            `${state.overlap?.num_edges_with_provenance ?? 0} edges with provenance.`
-        );
+        const edgeCount = state.overlap?.num_edges_with_provenance ?? 0;
+        const filterNote = sources ? ` (filtered to ${sources.length} source(s))` : "";
+        setStatus("compare-overlap-status", `${edgeCount} edges with provenance${filterNote}.`);
     } catch (e) {
         setStatus("compare-overlap-status", `Failed: ${e.message || e}`);
     }
@@ -280,16 +407,18 @@ async function scanConflicts() {
     const btn = el("compare-conflicts-scan");
     if (btn) btn.disabled = true;
     const judge = el("compare-conflicts-judge")?.checked !== false;
+    const sources = activeSources();
     setStatus("compare-conflicts-status", "Scanning provenance layer...");
     try {
-        const start = await startConflictScan({ judge });
+        const start = await startConflictScan({ judge, sources });
         const result = await pollJob(start.job_id, {
             statusId: "compare-conflicts-status",
             label: "Conflict scan",
         });
         state.conflicts = Array.isArray(result?.conflicts) ? result.conflicts : [];
         renderConflicts();
-        setStatus("compare-conflicts-status", `${state.conflicts.length} candidate(s).`);
+        const filterNote = sources ? ` (filtered to ${sources.length} source(s))` : "";
+        setStatus("compare-conflicts-status", `${state.conflicts.length} candidate(s)${filterNote}.`);
         await refreshRecordedConflicts();
     } catch (e) {
         setStatus("compare-conflicts-status", `Failed: ${e.message || e}`);
@@ -410,10 +539,12 @@ function exportConflicts() {
 
 async function refreshAmbiguity() {
     setStatus("compare-ambiguity-status", "Loading ambiguity report...");
+    const sources = activeSources();
     try {
-        state.ambiguity = await fetchAmbiguityReport();
+        state.ambiguity = await fetchAmbiguityReport({ sources });
         renderAmbiguity();
-        setStatus("compare-ambiguity-status", "");
+        const filterNote = sources ? ` (filtered to ${sources.length} source(s))` : "";
+        setStatus("compare-ambiguity-status", filterNote ? filterNote.trim() : "");
     } catch (e) {
         setStatus("compare-ambiguity-status", `Failed: ${e.message || e}`);
     }
@@ -511,6 +642,12 @@ function exportAmbiguity() {
 /* ------------------------------ wiring ------------------------------ */
 
 export function wireComparisonView() {
+    // Source selector
+    el("compare-sources-refresh")?.addEventListener("click", loadSources);
+    el("compare-sources-select-all")?.addEventListener("click", selectAllSources);
+    el("compare-sources-clear")?.addEventListener("click", clearAllSources);
+
+    // Analysis actions
     el("compare-overlap-refresh")?.addEventListener("click", refreshOverlap);
     el("compare-overlap-export")?.addEventListener("click", exportOverlap);
     el("compare-alignment-scan")?.addEventListener("click", scanAlignment);
@@ -519,8 +656,9 @@ export function wireComparisonView() {
     el("compare-ambiguity-refresh")?.addEventListener("click", refreshAmbiguity);
     el("compare-ambiguity-export")?.addEventListener("click", exportAmbiguity);
 
-    // Lazy-load overlap the first time the Compare tab is opened.
+    // Lazy-load sources + overlap the first time the Compare tab is opened.
     el("compare-view-tab")?.addEventListener("shown.bs.tab", () => {
+        loadSources();
         if (!state.overlapLoaded) {
             refreshOverlap();
             refreshRecordedConflicts();
