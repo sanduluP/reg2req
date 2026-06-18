@@ -22,7 +22,14 @@ from threading import Thread
 from flask import Blueprint, jsonify, request
 
 from kbdebugger.pipeline.config import PipelineConfig
-from kbdebugger.extraction.predicate_options import DEFAULT_ALLOWED_PREDICATES
+from kbdebugger.extraction.predicate_options import (
+    DEFAULT_ALLOWED_PREDICATES,
+    PREDICATE_FAMILIES,
+    FAMILY_LABELS,
+    PRESETS,
+    DEFAULT_PRESET,
+    resolve_extraction_vocabulary,
+)
 
 from ui.services.job_store import JOB_STORE
 from ui.services.pipeline_runner import run_pipeline
@@ -66,7 +73,24 @@ def _save_upload_to_tmp(file_storage) -> Path:
 
 @pipeline_bp.get("/triplet-predicates")
 def get_triplet_predicates():
-    return jsonify({"predicates": list(DEFAULT_ALLOWED_PREDICATES)})
+    """Expose the predicate vocabulary, grouped into families, plus presets."""
+    return jsonify(
+        {
+            "predicates": list(DEFAULT_ALLOWED_PREDICATES),
+            "families": {key: list(value) for key, value in PREDICATE_FAMILIES.items()},
+            "family_labels": dict(FAMILY_LABELS),
+            "presets": {
+                key: {
+                    "label": preset["label"],
+                    "families": list(preset["families"]),
+                    "edge_mode": preset["edge_mode"],
+                    "modality": preset["modality"],
+                }
+                for key, preset in PRESETS.items()
+            },
+            "default_preset": DEFAULT_PRESET,
+        }
+    )
 
 
 @pipeline_bp.post("/run")
@@ -208,7 +232,22 @@ def start_triplet_extraction():
         return jsonify({"error": "No non-empty qualities provided."}), 400
 
     qualities = [item["quality"] for item in selected_items]
-    allowed_predicates = list(DEFAULT_ALLOWED_PREDICATES)
+
+    # Resolve the extraction vocabulary from the (optional) settings the UI
+    # sends. Absent settings -> the default preset (everything), which matches
+    # the previous behavior of using the full predicate list.
+    raw_settings = payload.get("extraction_settings")
+    settings = raw_settings if isinstance(raw_settings, dict) else {}
+    vocab = resolve_extraction_vocabulary(
+        preset=settings.get("preset"),
+        families=settings.get("families"),
+        custom_predicates=settings.get("custom_predicates"),
+        edge_mode=settings.get("edge_mode"),
+        modality=settings.get("modality_on"),
+    )
+    allowed_predicates = vocab["allowed_predicates"] or list(DEFAULT_ALLOWED_PREDICATES)
+    strict_predicates = vocab["edge_mode"] == "constrained"
+    derive_modality = bool(vocab["modality"])
     job = JOB_STORE.create_job()
 
     def worker() -> None:
@@ -235,6 +274,8 @@ def start_triplet_extraction():
                 parallel=cfg.triplet_extraction_parallel,
                 max_workers=cfg.triplet_extraction_max_workers,
                 schema_grounding_enabled=getattr(cfg, "schema_grounding_enabled", True),
+                strict_predicates=strict_predicates,
+                derive_modality_from_predicate=derive_modality,
             )
 
             aligned_extracted: list[dict] = []
@@ -275,6 +316,13 @@ def start_triplet_extraction():
             result = {
                 "extracted_triplets": aligned_extracted,
                 "allowed_predicates": allowed_predicates,
+                "extraction_vocabulary": {
+                    "preset": vocab["preset"],
+                    "families": vocab["families"],
+                    "edge_mode": vocab["edge_mode"],
+                    "modality": vocab["modality"],
+                    "custom_predicates": vocab["custom_predicates"],
+                },
                 "input_count": len(selected_items),
             }
 

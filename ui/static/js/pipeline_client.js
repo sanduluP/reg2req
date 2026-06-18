@@ -15,11 +15,11 @@ export async function getJobStatus(jobId) {
 }
 
 
-export async function startTripletExtractionJob({ selected_items }) {
+export async function startTripletExtractionJob({ selected_items, extraction_settings }) {
   return fetchJson("/api/pipeline/triplet-extraction", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ selected_items }),
+    body: JSON.stringify({ selected_items, extraction_settings }),
   });
 }
 

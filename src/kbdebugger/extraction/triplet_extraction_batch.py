@@ -144,6 +144,8 @@ def extract_triplets_batch(
     max_workers: int = 2,
     schema_grounding_enabled: bool = True,
     neutral_mode: bool = False,
+    strict_predicates: bool = False,
+    derive_modality_from_predicate: bool = False,
 ) -> List[ExtractionResult]:
     sent_list = [s.strip() for s in sentences if s and s.strip()]
     if not sent_list:
@@ -196,6 +198,8 @@ def extract_triplets_batch(
                     schema_contexts=batch_contexts,
                     schema_profile=profile,
                     neutral_mode=neutral_mode,
+                    strict_predicates=strict_predicates,
+                    derive_modality_from_predicate=derive_modality_from_predicate,
                 ): batch_idx
                 for batch_idx, (batch, batch_contexts) in batches
             }
@@ -232,6 +236,8 @@ def extract_triplets_batch(
             schema_contexts=batch_contexts,
             schema_profile=profile,
             neutral_mode=neutral_mode,
+            strict_predicates=strict_predicates,
+            derive_modality_from_predicate=derive_modality_from_predicate,
         )
         all_results.extend(batch_results)
 
@@ -322,6 +328,8 @@ def _safe_extract_batch_via_llm(
     schema_contexts: Sequence[SchemaGroundingContext] | None = None,
     schema_profile=None,
     neutral_mode: bool = False,
+    strict_predicates: bool = False,
+    derive_modality_from_predicate: bool = False,
 ) -> tuple[int, list[ExtractionResult]]:
     model_label = _llm_model_label()
     prompt = build_triplet_extraction_prompt_batch(
@@ -337,7 +345,13 @@ def _safe_extract_batch_via_llm(
             json_mode=True,
         )
         parsed = ensure_json_object(response)
-        results = coerce_triplets_batch(parsed, batch, allowed_predicates=predicates)
+        results = coerce_triplets_batch(
+            parsed,
+            batch,
+            allowed_predicates=predicates,
+            strict_predicates=strict_predicates,
+            derive_modality_from_predicate=derive_modality_from_predicate,
+        )
         if schema_contexts is not None and schema_profile is not None:
             results = [
                 validate_extraction_with_standard_schema(

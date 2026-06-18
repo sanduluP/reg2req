@@ -32,7 +32,7 @@ def test_overlap_route_returns_report(monkeypatch):
         "concepts": {"documents": ["iso.pdf"], "rows": []},
         "num_edges_with_provenance": 3,
     }
-    monkeypatch.setattr(overlap, "build_overlap_report", lambda graph=None: fake_report)
+    monkeypatch.setattr(overlap, "build_overlap_report", lambda graph=None, **kwargs: fake_report)
 
     response = _app().test_client().get("/api/comparison/overlap")
 
@@ -155,7 +155,7 @@ def test_ambiguity_route_returns_report(monkeypatch):
         "vague_language": [],
         "near_synonyms": [],
     }
-    monkeypatch.setattr(ambiguity, "build_ambiguity_report", lambda graph=None: fake_report)
+    monkeypatch.setattr(ambiguity, "build_ambiguity_report", lambda graph=None, **kwargs: fake_report)
 
     response = _app().test_client().get("/api/comparison/ambiguity")
 

@@ -23,19 +23,34 @@ def coerce_triplets(
     fallback_sentence: str,
     *,
     allowed_predicates: Optional[Sequence[str]] = None,
+    strict_predicates: bool = False,
+    derive_modality_from_predicate: bool = False,
 ) -> ExtractionResult:
     """
     Coerce a single item dict to ExtractionResult.
 
-    Predicates outside the standard predicate list are kept (never silently
-    dropped) and reported via `non_standard_predicates` so the review UI can
-    flag them for extra reviewer attention.
+    Parameters
+    ----------
+    strict_predicates:
+        Edge-label policy. When False (default, "relaxed"), predicates outside
+        the allowed list are KEPT and reported via ``non_standard_predicates``
+        so the reviewer can decide. When True ("constrained"), off-vocabulary
+        predicates are dropped instead.
+    derive_modality_from_predicate:
+        When True and the item has no explicit (valid) modality, the deontic
+        strength is inferred from strength-bearing predicates (Requires ->
+        MANDATORY, Prohibits -> PROHIBITED, etc.). Off by default to preserve
+        existing behavior; enabled by the standards extraction path so the
+        Compare tab always has a modality to compare.
     """
+    from kbdebugger.extraction.predicate_options import modality_from_predicates
+
     sentence = item.get("sentence", fallback_sentence)
     raw_triplets = item.get("triplets", [])
     allowed = _predicate_set(allowed_predicates)
     triplets: list[TripletSubjectObjectPredicate] = []
     non_standard_predicates: list[str] = []
+    dropped_predicates: list[str] = []
 
     if isinstance(raw_triplets, list):
         for t in raw_triplets:
@@ -48,6 +63,10 @@ def coerce_triplets(
                     if not (subj_clean and obj_clean and rel_clean):
                         continue
                     if allowed is not None and rel_clean not in allowed:
+                        if strict_predicates:
+                            # Constrained edge labels: drop off-vocabulary.
+                            dropped_predicates.append(rel_clean)
+                            continue
                         non_standard_predicates.append(rel_clean)
                     triplets.append((subj_clean, obj_clean, rel_clean))
 
@@ -58,12 +77,21 @@ def coerce_triplets(
     modality = str(item.get("modality") or "").strip().upper()
     if modality in {"MANDATORY", "RECOMMENDED", "OPTIONAL", "PROHIBITED"}:
         result["modality"] = modality
+    elif derive_modality_from_predicate:
+        derived = modality_from_predicates(rel for _s, _o, rel in triplets)
+        if derived:
+            result["modality"] = derived
 
     skipped_reason_raw = item.get("skipped_reason")
     skipped_reason = str(skipped_reason_raw).strip() if skipped_reason_raw else ""
 
     if skipped_reason:
         result["skipped_reason"] = skipped_reason
+    elif not triplets and dropped_predicates:
+        result["skipped_reason"] = (
+            "Only off-vocabulary predicate(s) were extracted and dropped in "
+            "constrained mode: " + ", ".join(sorted(set(dropped_predicates)))
+        )
     elif allowed is not None and not triplets:
         result["skipped_reason"] = "No allowed relationship type fit this quality."
 
@@ -75,6 +103,8 @@ def coerce_triplets_batch(
     sentences: List[str],
     *,
     allowed_predicates: Optional[Sequence[str]] = None,
+    strict_predicates: bool = False,
+    derive_modality_from_predicate: bool = False,
 ) -> List[ExtractionResult]:
     """
     Coerce the LLM batch output of shape:
@@ -102,6 +132,8 @@ def coerce_triplets_batch(
                 item,
                 sentences[idx],
                 allowed_predicates=allowed_predicates,
+                strict_predicates=strict_predicates,
+                derive_modality_from_predicate=derive_modality_from_predicate,
             )
 
     for i, res in enumerate(results):

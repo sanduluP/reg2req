@@ -6,6 +6,7 @@
  */
 
 import { startTripletExtractionJob, getJobStatus } from "./pipeline_client.js";
+import { getExtractionSettings } from "./extraction_settings_controller.js";
 import { showOversightOverlay, hideOversightOverlay } from "./oversight_overlay.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
 import { renderExtractedTripletsFromJobResult, hasTripletsCache, showCachedTripletsStep } from "./extracted_triplets_controller.js";
@@ -338,7 +339,10 @@ async function runTripletExtractionJobForItems(selectedItems, {
   if (showOverlay) showOversightOverlay(overlayTitle, overlaySubtitle);
 
   try {
-    const start = await startTripletExtractionJob({ selected_items: selectedItems });
+    const start = await startTripletExtractionJob({
+      selected_items: selectedItems,
+      extraction_settings: getExtractionSettings(),
+    });
     const jobId = start.job_id;
 
     while (true) {
