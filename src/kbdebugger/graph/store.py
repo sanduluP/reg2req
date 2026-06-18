@@ -9,7 +9,7 @@ from typing_extensions import LiteralString
 from dotenv import load_dotenv
 from rich.progress import track
 
-from neo4j import GraphDatabase, Driver
+from neo4j import GraphDatabase, Driver, NotificationDisabledCategory
 from neo4j.exceptions import Neo4jError
 
 from kbdebugger.types import GraphRelation
@@ -70,7 +70,13 @@ class GraphStore:
             raise RuntimeError("NEO4J_URI is not set (pass uri=... or set env var).")
 
         # inner = Neo4jGraph(url=neo4j_uri, username=neo4j_user, password=neo4j_pass)
-        driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
+        driver = GraphDatabase.driver(
+            neo4j_uri,
+            auth=(neo4j_user, neo4j_pass),
+            # Suppress "unknown label / property / relationship type" noise on a
+            # fresh schema — these are expected until data is written.
+            notifications_disabled_categories=[NotificationDisabledCategory.UNRECOGNIZED],
+        )
 
         if verbose:
             rich.print(
