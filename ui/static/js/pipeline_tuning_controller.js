@@ -50,6 +50,12 @@ function restore() {
     } catch (_) { return null; }
 }
 
+function notifyThresholdChange() {
+    window.dispatchEvent(new CustomEvent("kb:pipeline-threshold-change", {
+        detail: { values: { ...state.values } },
+    }));
+}
+
 /** Public: the current threshold values sent with a pipeline run. */
 export function getPipelineThresholdValues() {
     return { ...state.values };
@@ -90,6 +96,7 @@ export async function initPipelineTuning({ containerId = "pipeline-tuning" } = {
     }
     state.loaded = true;
     render(container);
+    notifyThresholdChange();
 
     const toggle = el("pipeline-tuning-toggle");
     const panel = el(containerId);
@@ -146,6 +153,7 @@ function wire(container) {
         // keep both inputs in lockstep
         container.querySelectorAll(`[data-key="${key}"]`).forEach(inp => { inp.value = v; });
         persist();
+        notifyThresholdChange();
     };
 
     container.querySelectorAll(".tuning-range").forEach(r => {
@@ -159,5 +167,6 @@ function wire(container) {
         for (const spec of SPECS) state.values[spec.key] = state.defaults[spec.key];
         persist();
         render(container);
+        notifyThresholdChange();
     });
 }
