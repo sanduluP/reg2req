@@ -12,6 +12,7 @@ import { wirePipelineRunControls } from "./pipeline_controller.js";
 import { wireHumanOversightSubmit, renderHumanOversightFromPipelineResult, wireGoToTripletsButton } from "./oversight_controller.js";
 import { wireComparisonView, refreshComparisonSources } from "./comparison_controller.js";
 import { initExtractionSettings } from "./extraction_settings_controller.js";
+import { initPipelineTuning } from "./pipeline_tuning_controller.js";
 import { wireSeedButton } from "./seed_controller.js";
 import { registerSubgraphRenderer } from "./graph_refresh.js";
 import { hideProgressPanel } from "./pipeline_progress_ui.js"
@@ -60,6 +61,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Extraction profile (predicate families, edge-label policy, modality, custom predicates)
   initExtractionSettings({ containerId: "extraction-settings" });
+
+  // Tunable pipeline thresholds (paragraph relevance, KG similarity, top-k, limit)
+  initPipelineTuning({ containerId: "pipeline-tuning" });
 
   // ---------------------------------------------------------------------------
   // 4) Compare tab (cross-document overlap / alignment / conflicts / ambiguity)

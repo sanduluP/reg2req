@@ -9,6 +9,7 @@ import { setRunContext } from "./state/oversight_state.js";
 import { confirmModal } from "./modals/confirm_modal.js";
 import { hasPipelineSession, resetPipelineSession } from "./ui_reset.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
+import { getPipelineThresholdValues } from "./pipeline_tuning_controller.js";
 
 
 /**
@@ -185,7 +186,11 @@ export function wirePipelineRunControls({
 
     let jobId;
     try {
-      const startResp = await startPipelineJob({ keyword, files });
+      const startResp = await startPipelineJob({
+        keyword,
+        files,
+        thresholds: getPipelineThresholdValues(),
+      });
       jobId = startResp.job_id;
     } catch (err) {
       // eslint-disable-next-line no-alert

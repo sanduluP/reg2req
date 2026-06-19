@@ -33,7 +33,11 @@ from kbdebugger.extraction.predicate_options import (
 
 from ui.services.job_store import JOB_STORE
 from ui.services.pipeline_runner import run_pipeline
-from ui.services.pipeline_config_service import get_pipeline_config
+from ui.services.pipeline_config_service import (
+    get_pipeline_config,
+    current_thresholds,
+    apply_threshold_overrides,
+)
 
 from uuid import uuid4
 import tempfile
@@ -69,6 +73,12 @@ def _save_upload_to_tmp(file_storage) -> Path:
     dst = uploads_dir / f"{safe_name}"
     file_storage.save(dst)
     return dst
+
+
+@pipeline_bp.get("/thresholds")
+def get_thresholds():
+    """Current tunable pipeline thresholds (defaults the UI sliders start from)."""
+    return jsonify(current_thresholds())
 
 
 @pipeline_bp.get("/triplet-predicates")
@@ -142,7 +152,14 @@ def start_pipeline_run():
     job = JOB_STORE.create_job()
     paths = [_save_upload_to_tmp(f) for f in files]
 
-    cfg = get_pipeline_config()
+    # Per-run threshold overrides from the UI tuning panel (form or query).
+    src = request.form if request.form else request.args
+    threshold_overrides = {
+        key: src.get(key)
+        for key in ("para_threshold", "sim_threshold", "top_k", "kg_limit")
+        if src.get(key) not in (None, "")
+    }
+    cfg = apply_threshold_overrides(get_pipeline_config(), threshold_overrides)
 
     def worker() -> None:
         try:
