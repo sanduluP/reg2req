@@ -1,6 +1,6 @@
 
-from dataclasses import dataclass
-from typing import List, Literal, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from kbdebugger.compat.langchain import Document
 
@@ -45,3 +45,6 @@ class KeywordDocMatchResult:
     # matched: List[ParagraphMatch]
     # unmatched: List[ParagraphMatch]
     synonyms: List[str]
+    # DEBUG/TEST FEATURE (safe to remove): per-paragraph match scores so the UI
+    # can show which chunk got what score against the keyword.
+    scored_chunks: List[Dict[str, Any]] = field(default_factory=list)

@@ -195,6 +195,8 @@ def run_pipeline(
 
     matched_docs_by_dimension: Dict[str, List[Document]] = {}
     keybert_logs_by_dimension: Dict[str, Any] = {}
+    # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores for the UI.
+    chunk_scores_by_dimension: Dict[str, Any] = {}
     for dim_idx, dimension in enumerate(dimensions, start=1):
         init_stage(
             job_id=job_id,
@@ -216,6 +218,7 @@ def run_pipeline(
         )
         matched_docs_by_dimension[dimension] = keybert_result.matched_docs
         keybert_logs_by_dimension[dimension] = keybert_log
+        chunk_scores_by_dimension[dimension] = getattr(keybert_result, "scored_chunks", [])
 
     # Dedup matched paragraphs across dimensions; tag each with its dimension(s).
     matched_indices, dims_by_paragraph_index = assign_paragraph_dimensions(
@@ -237,6 +240,12 @@ def run_pipeline(
             dim: len(matched_docs_by_dimension.get(dim, [])) for dim in dimensions
         },
         "logs": keybert_logs_by_dimension,
+        # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores +
+        # the active paragraph-relevance threshold so the UI can show the cutoff.
+        "chunk_scores": chunk_scores_by_dimension,
+        "para_threshold": float(
+            getattr(cfg.keybert, "search_kw_to_paragraph_similarity_threshold", 0.45)
+        ),
     }
 
     # ---------------------------

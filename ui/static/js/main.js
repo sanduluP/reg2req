@@ -13,6 +13,7 @@ import { wireHumanOversightSubmit, renderHumanOversightFromPipelineResult, wireG
 import { wireComparisonView, refreshComparisonSources } from "./comparison_controller.js";
 import { initExtractionSettings } from "./extraction_settings_controller.js";
 import { initPipelineTuning } from "./pipeline_tuning_controller.js";
+import { renderChunkScoresDebug } from "./chunk_scores_debug.js"; // DEBUG/TEST (safe to remove)
 import { wireSeedButton } from "./seed_controller.js";
 import { registerSubgraphRenderer } from "./graph_refresh.js";
 import { hideProgressPanel } from "./pipeline_progress_ui.js"
@@ -54,6 +55,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderHumanOversightFromPipelineResult(result);
       // Refresh Compare tab source inventory with the newly processed documents
       refreshComparisonSources();
+      // DEBUG/TEST (safe to remove): show per-chunk KeyBERT scores.
+      renderChunkScoresDebug(result);
     },
   });
 

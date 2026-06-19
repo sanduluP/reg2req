@@ -89,11 +89,39 @@ def filter_paragraphs_by_keyword(
     matched_docs = [paragraphs[m.index] for m in matched]
     unmatched_docs = [paragraphs[u.index] for u in unmatched]
 
-    
+    # DEBUG/TEST FEATURE (safe to remove): per-paragraph match scores so the UI
+    # can display which chunk scored what against the keyword.
+    scored_chunks = _build_scored_chunks(matched + unmatched)
+
     return KeywordDocMatchResult(
         matched_docs=matched_docs,
         unmatched_docs=unmatched_docs,
         synonyms=synonyms,
+        scored_chunks=scored_chunks,
         # matched=matched,
         # unmatched=unmatched,
     ), log_payload
+
+
+def _build_scored_chunks(matches, *, excerpt_len: int = 240) -> list[dict]:
+    """
+    DEBUG/TEST helper (safe to remove): flatten ParagraphMatch records into
+    lightweight dicts the UI can table — cosine score, match type, kept flag.
+    """
+    out: list[dict] = []
+    for m in matches:
+        text = (m.paragraph or "").strip()
+        excerpt = text[:excerpt_len] + ("…" if len(text) > excerpt_len else "")
+        out.append(
+            {
+                "index": m.index,
+                "matched": m.match_type is not None,
+                "match_type": m.match_type,
+                "score": (round(m.cosine_sim_score, 4) if m.cosine_sim_score is not None else None),
+                "excerpt": excerpt,
+                "keywords": list(m.keywords or [])[:8],
+                "matched_terms": list(m.matched_terms or []),
+            }
+        )
+    out.sort(key=lambda c: c["index"])
+    return out
