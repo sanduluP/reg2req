@@ -40,6 +40,11 @@ def create_app() -> Flask:
         template_folder="../templates",
         static_folder="../static",
     )
+    # Dev: don't let the browser cache our static JS/CSS. Without this, edits to
+    # files like the chunk-scores panel won't appear on a normal refresh (the
+    # browser serves a stale cached copy), which looks like "no changes".
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     print(">>> Flask created", flush=True)
 
     # Register modular routes (Blueprints)
