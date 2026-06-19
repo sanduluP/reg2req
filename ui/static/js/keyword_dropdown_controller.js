@@ -23,6 +23,39 @@ let currentSubgraphAbort = null;
  */
 export const ALL_DIMENSIONS = "__ALL_DIMENSIONS__";
 
+/** Sentinel: user types their own keyword(s) (free text). */
+export const CUSTOM_KEYWORD = "__CUSTOM__";
+
+/** Sentinel: no keyword — extract the whole document (text → graph). */
+export const NO_KEYWORD = "__NO_KEYWORD__";
+
+/**
+ * Resolve the current keyword selection into the payload the pipeline run needs.
+ * @returns {{keyword: string, custom_keywords: string}}
+ */
+export function getKeywordSelection() {
+  const select = document.getElementById("keyword-select");
+  const value = (select?.value || "").trim();
+  if (value === CUSTOM_KEYWORD) {
+    const input = document.getElementById("custom-keyword-input");
+    return { keyword: CUSTOM_KEYWORD, custom_keywords: (input?.value || "").trim() };
+  }
+  return { keyword: value, custom_keywords: "" };
+}
+
+/**
+ * Whether the current selection is enough to enable Run:
+ * - NO_KEYWORD: always ready (whole document)
+ * - CUSTOM: ready only when the custom input has text
+ * - dimension / complete scan: ready when a value is chosen
+ */
+export function isKeywordSelectionReady() {
+  const sel = getKeywordSelection();
+  if (!sel.keyword) return false;
+  if (sel.keyword === CUSTOM_KEYWORD) return sel.custom_keywords.length > 0;
+  return true;
+}
+
 /**
  * Initialize the keyword dropdown and connect it to subgraph fetch/render.
  *
@@ -124,6 +157,18 @@ export async function initKeywordDropdown({
     allOpt.textContent = "🔍 Complete trustworthy-AI scan (all dimensions)";
     select.appendChild(allOpt);
 
+    // Custom keyword(s) — user supplies their own focus terms.
+    const customOpt = document.createElement("option");
+    customOpt.value = CUSTOM_KEYWORD;
+    customOpt.textContent = "✏️ Custom keyword(s)…";
+    select.appendChild(customOpt);
+
+    // No keyword — whole-document extraction (text → graph).
+    const noneOpt = document.createElement("option");
+    noneOpt.value = NO_KEYWORD;
+    noneOpt.textContent = "📄 No keyword — whole document (text → graph)";
+    select.appendChild(noneOpt);
+
     const dimGroup = document.createElement("optgroup");
     dimGroup.label = "Single dimension";
     for (const k of keywords) {
@@ -136,12 +181,44 @@ export async function initKeywordDropdown({
 
     // IMPORTANT: no auto-selection, no auto-fetch.
 
+    const customInput = document.getElementById("custom-keyword-input");
+    const showCustomInput = (show) => {
+      if (customInput) customInput.classList.toggle("d-none", !show);
+    };
+
+    // Enable Run as the user types custom keyword(s).
+    if (customInput) {
+      customInput.addEventListener("input", () => {
+        if ((select.value || "").trim() === CUSTOM_KEYWORD) {
+          setHasKeywordSelected(customInput.value.trim().length > 0);
+        }
+      });
+    }
+
     select.addEventListener("change", async () => {
       const chosen = (select.value || "").trim();
 
       // If somehow empty, keep upload disabled
       if (!chosen) {
+        showCustomInput(false);
         setHasKeywordSelected(false);
+        return;
+      }
+
+      // Custom keyword(s): reveal the text box; Run enables once it has text.
+      if (chosen === CUSTOM_KEYWORD) {
+        showCustomInput(true);
+        setHasKeywordSelected((customInput?.value || "").trim().length > 0);
+        if (customInput) customInput.focus();
+        return;
+      }
+
+      showCustomInput(false);
+
+      // No keyword: whole-document extraction. Nothing to filter, no subgraph to
+      // preview — just enable Run.
+      if (chosen === NO_KEYWORD) {
+        setHasKeywordSelected(true);
         return;
       }
 

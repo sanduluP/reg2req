@@ -96,6 +96,7 @@ def run_pipeline(
     keyword: str,
     cfg: PipelineConfig,
     keywords: Sequence[str] | None = None,
+    filter_chunks: bool = True,
 ) -> Dict[str, Any]:
     """
     Run Stage 2 end-to-end over one or more documents and return
@@ -125,14 +126,27 @@ def run_pipeline(
 
     num_docs = len(paths)
 
-    # Dimensions to scan: an explicit list (complete trustworthy-AI scan) or the
-    # single selected keyword. A paragraph/quality may match several dimensions.
-    dimensions = [d.strip() for d in (keywords if keywords else [keyword]) if d and str(d).strip()]
-    if not dimensions:
-        dimensions = [keyword]
-    # Preserve order, drop duplicates.
-    dimensions = list(dict.fromkeys(dimensions))
-    scan_mode = "complete" if len(dimensions) > 1 else "single"
+    # Three keyword scenarios:
+    #   1. predefined dimension / complete scan -> keywords = [dim] or [all dims]
+    #   2. user-supplied custom keyword(s)       -> keywords = [kw, ...]
+    #   3. no keyword (whole-document text->graph)-> filter_chunks=False, keywords=[]
+    # `keywords is None` means the legacy single-keyword call (use `keyword`).
+    if keywords is None:
+        dimensions = [keyword] if keyword and str(keyword).strip() else []
+    else:
+        dimensions = [str(d).strip() for d in keywords if d and str(d).strip()]
+    dimensions = list(dict.fromkeys(dimensions))  # preserve order, drop dups
+
+    if not filter_chunks:
+        scan_mode = "whole_document"
+        dimensions = []  # nothing to filter or tag against
+    elif len(dimensions) > 1:
+        scan_mode = "complete"
+    else:
+        scan_mode = "single"
+
+    if filter_chunks and not dimensions:
+        raise ValueError("Keyword filtering requested but no keyword was provided.")
 
     # ---------------------------
     # Stage 2a: Docling (per document, so provenance stays per-doc)
@@ -175,78 +189,100 @@ def run_pipeline(
     }
 
     # ---------------------------
-    # Stage 2b: KeyBERT filter — per dimension, tagging each matched paragraph
+    # Stage 2b: keyword filter (or skip it entirely for whole-document mode)
     # ---------------------------
-    # We match paragraphs separately for every scanned dimension so each one
-    # carries dimension tags, but we only keep the UNION of matched paragraphs
-    # (deduped) — the expensive decomposition runs once over that union.
     total_par = len(all_paragraphs)
-    num_dims = len(dimensions)
-    init_stage(
-        job_id=job_id,
-        stage="KeyBERT",
-        message=(
-            f"🔎 Scanning {total_par} paragraphs from {num_docs} document(s) "
-            f"for {num_dims} dimension(s): {', '.join(dimensions)}..."
-        ),
-        current=0,
-        total=num_dims,
-    )
 
-    matched_docs_by_dimension: Dict[str, List[Document]] = {}
-    keybert_logs_by_dimension: Dict[str, Any] = {}
-    # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores for the UI.
-    chunk_scores_by_dimension: Dict[str, Any] = {}
-    for dim_idx, dimension in enumerate(dimensions, start=1):
+    if not filter_chunks:
+        # Scenario 3 — no keyword: there is nothing to drop or prioritise, so
+        # skip KeyBERT and decompose the WHOLE document (text -> graph).
         init_stage(
             job_id=job_id,
             stage="KeyBERT",
-            message=f"🔎 Matching paragraphs for dimension {dim_idx}/{num_dims}: '{dimension}'...",
-            current=dim_idx - 1,
+            message=f"📄 No keyword — decomposing the whole document ({total_par} paragraphs)…",
+            current=1,
+            total=1,
+        )
+        matched_docs = list(all_paragraphs)
+        dims_by_decompose_index = {pos: set() for pos in range(len(matched_docs))}
+        keybert_log = {
+            "skipped": True,
+            "scan_mode": scan_mode,
+            "reason": "No keyword provided — whole-document extraction; chunk filtering skipped.",
+            "matched_paragraphs": len(matched_docs),
+            "dimensions": [],
+            "chunk_scores": {},
+        }
+    else:
+        # Scenarios 1 & 2 — predefined dimension(s) or user keyword(s). Match
+        # paragraphs per keyword so each carries tags, but keep the UNION
+        # (deduped) so the expensive decomposition runs once.
+        num_dims = len(dimensions)
+        init_stage(
+            job_id=job_id,
+            stage="KeyBERT",
+            message=(
+                f"🔎 Scanning {total_par} paragraphs from {num_docs} document(s) "
+                f"for {num_dims} keyword(s): {', '.join(dimensions)}..."
+            ),
+            current=0,
             total=num_dims,
         )
-        keybert_result, keybert_log = filter_paragraphs_by_keyword(
-            paragraphs=all_paragraphs,
-            search_keyword=dimension,
-            config=cfg.keybert,
-            synonyms_enabled=cfg.keyword_synonyms_enabled,
-            synonym_cache_enabled=cfg.keyword_synonym_cache_enabled,
-            synonym_cache_path=cfg.keyword_synonym_cache_path,
-            synonym_defaults_path=cfg.keyword_synonym_defaults_path,
-            synonym_cache_write=cfg.keyword_synonym_cache_write,
-            progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
+
+        matched_docs_by_dimension: Dict[str, List[Document]] = {}
+        keybert_logs_by_dimension: Dict[str, Any] = {}
+        # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores for the UI.
+        chunk_scores_by_dimension: Dict[str, Any] = {}
+        for dim_idx, dimension in enumerate(dimensions, start=1):
+            init_stage(
+                job_id=job_id,
+                stage="KeyBERT",
+                message=f"🔎 Matching paragraphs for keyword {dim_idx}/{num_dims}: '{dimension}'...",
+                current=dim_idx - 1,
+                total=num_dims,
+            )
+            keybert_result, keybert_log = filter_paragraphs_by_keyword(
+                paragraphs=all_paragraphs,
+                search_keyword=dimension,
+                config=cfg.keybert,
+                synonyms_enabled=cfg.keyword_synonyms_enabled,
+                synonym_cache_enabled=cfg.keyword_synonym_cache_enabled,
+                synonym_cache_path=cfg.keyword_synonym_cache_path,
+                synonym_defaults_path=cfg.keyword_synonym_defaults_path,
+                synonym_cache_write=cfg.keyword_synonym_cache_write,
+                progress=make_job_progress_callback(job_id=job_id, stage="KeyBERT"),
+            )
+            matched_docs_by_dimension[dimension] = keybert_result.matched_docs
+            keybert_logs_by_dimension[dimension] = keybert_log
+            chunk_scores_by_dimension[dimension] = getattr(keybert_result, "scored_chunks", [])
+
+        # Dedup matched paragraphs across dimensions; tag each with its dimension(s).
+        matched_indices, dims_by_paragraph_index = assign_paragraph_dimensions(
+            all_paragraphs, matched_docs_by_dimension
         )
-        matched_docs_by_dimension[dimension] = keybert_result.matched_docs
-        keybert_logs_by_dimension[dimension] = keybert_log
-        chunk_scores_by_dimension[dimension] = getattr(keybert_result, "scored_chunks", [])
+        matched_docs = [all_paragraphs[i] for i in matched_indices]
+        # Map decomposer input position -> dimension set (decompose receives
+        # matched_docs in this exact order).
+        dims_by_decompose_index = {
+            pos: dims_by_paragraph_index.get(orig_idx, set())
+            for pos, orig_idx in enumerate(matched_indices)
+        }
 
-    # Dedup matched paragraphs across dimensions; tag each with its dimension(s).
-    matched_indices, dims_by_paragraph_index = assign_paragraph_dimensions(
-        all_paragraphs, matched_docs_by_dimension
-    )
-    matched_docs = [all_paragraphs[i] for i in matched_indices]
-    # Map decomposer input position -> dimension set (decompose receives
-    # matched_docs in this exact order).
-    dims_by_decompose_index = {
-        pos: dims_by_paragraph_index.get(orig_idx, set())
-        for pos, orig_idx in enumerate(matched_indices)
-    }
-
-    keybert_log = {
-        "dimensions": dimensions,
-        "scan_mode": scan_mode,
-        "matched_paragraphs": len(matched_docs),
-        "per_dimension": {
-            dim: len(matched_docs_by_dimension.get(dim, [])) for dim in dimensions
-        },
-        "logs": keybert_logs_by_dimension,
-        # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores +
-        # the active paragraph-relevance threshold so the UI can show the cutoff.
-        "chunk_scores": chunk_scores_by_dimension,
-        "para_threshold": float(
-            getattr(cfg.keybert, "search_kw_to_paragraph_similarity_threshold", 0.45)
-        ),
-    }
+        keybert_log = {
+            "dimensions": dimensions,
+            "scan_mode": scan_mode,
+            "matched_paragraphs": len(matched_docs),
+            "per_dimension": {
+                dim: len(matched_docs_by_dimension.get(dim, [])) for dim in dimensions
+            },
+            "logs": keybert_logs_by_dimension,
+            # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores +
+            # the active paragraph-relevance threshold so the UI can show the cutoff.
+            "chunk_scores": chunk_scores_by_dimension,
+            "para_threshold": float(
+                getattr(cfg.keybert, "search_kw_to_paragraph_similarity_threshold", 0.45)
+            ),
+        }
 
     # ---------------------------
     # Stage 2c: LLM Decomposer
@@ -385,6 +421,7 @@ def run_pipeline(
         "keyword": keyword,
         "dimensions": dimensions,
         "scan_mode": scan_mode,
+        "filter_chunks": filter_chunks,
     }
 
     return to_jsonable(response)

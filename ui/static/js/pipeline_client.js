@@ -1,10 +1,13 @@
 import { fetchJson } from "./api_client.js";
 
-export async function startPipelineJob({ keyword, files, thresholds }) {
+export async function startPipelineJob({ keyword, custom_keywords, files, thresholds }) {
   const form = new FormData();
   for (const file of files || []) {
     form.append("documents", file);
   }
+
+  // Custom keyword(s) for the "Custom keyword(s)…" mode (comma-separated).
+  if (custom_keywords) form.append("custom_keywords", custom_keywords);
 
   // Per-run threshold overrides (optional). Only non-empty values are sent;
   // the backend falls back to env defaults for anything omitted.

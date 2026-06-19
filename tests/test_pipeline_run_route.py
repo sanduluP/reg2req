@@ -23,10 +23,11 @@ def test_run_route_accepts_multiple_documents(monkeypatch):
 
     captured = {}
 
-    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None):
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None, filter_chunks=True):
         captured["file_names"] = [Path(p).name for p in file_paths]
         captured["keyword"] = keyword
         captured["keywords"] = keywords
+        captured["filter_chunks"] = filter_chunks
         return {"_meta": {"source_names": captured["file_names"], "keyword": keyword}}
 
     monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
@@ -61,9 +62,10 @@ def test_run_route_accepts_legacy_single_document_field(monkeypatch):
 
     captured = {}
 
-    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None):
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None, filter_chunks=True):
         captured["file_names"] = [Path(p).name for p in file_paths]
         captured["keywords"] = keywords
+        captured["filter_chunks"] = filter_chunks
         return {"_meta": {}}
 
     monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
@@ -84,6 +86,88 @@ def test_run_route_accepts_legacy_single_document_field(monkeypatch):
     assert record is not None
     assert record.state == "done"
     assert captured["file_names"] == ["single.pdf"]
+
+
+def test_run_route_no_keyword_skips_filtering(monkeypatch):
+    from ui.routes import pipeline_routes
+    from ui.ui_app.factory import create_app
+
+    captured = {}
+
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None, filter_chunks=True):
+        captured["keyword"] = keyword
+        captured["keywords"] = keywords
+        captured["filter_chunks"] = filter_chunks
+        return {"_meta": {}}
+
+    monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(pipeline_routes, "get_pipeline_config", lambda: object())
+
+    app = create_app()
+    app.testing = True
+
+    response = app.test_client().post(
+        "/api/pipeline/run?keyword=__NO_KEYWORD__",
+        data={"documents": (io.BytesIO(b"%PDF-1.4 x"), "doc.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    record = _poll_job(response.get_json()["job_id"])
+    assert record is not None and record.state == "done"
+    assert captured["filter_chunks"] is False
+    assert captured["keywords"] == []
+    assert captured["keyword"] == "Whole document"
+
+
+def test_run_route_custom_keywords(monkeypatch):
+    from ui.routes import pipeline_routes
+    from ui.ui_app.factory import create_app
+
+    captured = {}
+
+    def fake_run_pipeline(*, job_id, file_paths, keyword, cfg, keywords=None, filter_chunks=True):
+        captured["keyword"] = keyword
+        captured["keywords"] = keywords
+        captured["filter_chunks"] = filter_chunks
+        return {"_meta": {}}
+
+    monkeypatch.setattr(pipeline_routes, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(pipeline_routes, "get_pipeline_config", lambda: object())
+
+    app = create_app()
+    app.testing = True
+
+    response = app.test_client().post(
+        "/api/pipeline/run?keyword=__CUSTOM__",
+        data={
+            "documents": (io.BytesIO(b"%PDF-1.4 x"), "doc.pdf"),
+            "custom_keywords": "access control, encryption , access control",
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    record = _poll_job(response.get_json()["job_id"])
+    assert record is not None and record.state == "done"
+    assert captured["filter_chunks"] is True
+    # parsed, trimmed, de-duplicated
+    assert captured["keywords"] == ["access control", "encryption"]
+
+
+def test_run_route_custom_keywords_missing_returns_400(monkeypatch):
+    from ui.routes import pipeline_routes
+    from ui.ui_app.factory import create_app
+
+    monkeypatch.setattr(pipeline_routes, "get_pipeline_config", lambda: object())
+
+    app = create_app()
+    app.testing = True
+
+    response = app.test_client().post(
+        "/api/pipeline/run?keyword=__CUSTOM__",
+        data={"documents": (io.BytesIO(b"%PDF-1.4 x"), "doc.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
 
 
 def test_run_route_rejects_missing_documents(monkeypatch):

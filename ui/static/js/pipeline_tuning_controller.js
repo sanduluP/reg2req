@@ -55,6 +55,22 @@ export function getPipelineThresholdValues() {
     return { ...state.values };
 }
 
+/**
+ * Public: set one threshold programmatically (e.g. the chunk-scores panel
+ * pushing the relevance value the user dialed in). Re-renders if loaded.
+ */
+export function setPipelineThreshold(key, value) {
+    const spec = SPECS.find(s => s.key === key);
+    if (!spec) return;
+    let v = Number(value);
+    if (!Number.isFinite(v)) return;
+    v = Math.max(spec.min, Math.min(spec.max, v));
+    state.values[key] = spec.kind === "int" ? Math.round(v) : v;
+    persist();
+    const container = el("pipeline-tuning");
+    if (container && state.loaded) render(container);
+}
+
 export async function initPipelineTuning({ containerId = "pipeline-tuning" } = {}) {
     const container = el(containerId);
     if (!container) return;

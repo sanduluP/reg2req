@@ -10,6 +10,7 @@ import { confirmModal } from "./modals/confirm_modal.js";
 import { hasPipelineSession, resetPipelineSession } from "./ui_reset.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
 import { getPipelineThresholdValues } from "./pipeline_tuning_controller.js";
+import { getKeywordSelection, isKeywordSelectionReady } from "./keyword_dropdown_controller.js";
 
 
 /**
@@ -75,8 +76,7 @@ export function wirePipelineRunControls({
    * - file selected
    */
   function syncRunUi() {
-    const keyword = (keywordSel.value || "").trim();
-    const hasKeyword = Boolean(keyword);
+    const hasKeyword = isKeywordSelectionReady();
     const hasFile = Boolean(fileInput.files && fileInput.files.length > 0);
 
     const enabled = hasKeyword && hasFile && !isRunning;
@@ -86,7 +86,7 @@ export function wirePipelineRunControls({
     if (resetBtn) resetBtn.disabled = isRunning;  // don’t allow reset mid-run
 
     // Tooltip hints
-    if (!hasKeyword) runBtn.title = "Select a focus area first";
+    if (!hasKeyword) runBtn.title = "Select a focus area (or type custom keyword) first";
     else if (!hasFile) runBtn.title = "Choose a document first";
     else runBtn.title = "Start pipeline";
 
@@ -114,6 +114,8 @@ export function wirePipelineRunControls({
   // Recompute enablement when user changes keyword or file.
   keywordSel.addEventListener("change", syncRunUi);
   fileInput.addEventListener("change", syncRunUi);
+  // Custom keyword text also gates Run (Custom keyword(s)… mode).
+  document.getElementById("custom-keyword-input")?.addEventListener("input", syncRunUi);
 
   // Manual reset action (optional split-menu item)
   if (resetBtn) {
@@ -146,8 +148,8 @@ export function wirePipelineRunControls({
   runBtn.addEventListener("click", async () => {
     if (isRunning) return;
 
-    const keyword = (keywordSel.value || "").trim();
-    if (!keyword) return;
+    if (!isKeywordSelectionReady()) return;
+    const { keyword, custom_keywords } = getKeywordSelection();
 
     const files = Array.from(fileInput.files || []);
     if (files.length === 0) return;
@@ -188,6 +190,7 @@ export function wirePipelineRunControls({
     try {
       const startResp = await startPipelineJob({
         keyword,
+        custom_keywords,
         files,
         thresholds: getPipelineThresholdValues(),
       });

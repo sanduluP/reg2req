@@ -187,6 +187,28 @@ def _notify(
         progress(current, total, message)
 
 
+def _backfill_all_chunk_scores(
+    records: List[ParagraphMatch],
+    paragraphs: Sequence[str],
+    search_keyword: str,
+    cfg: KeyBERTConfig,
+) -> None:
+    """
+    Set cosine_sim_score on every record (vs the keyword), filling in the ones
+    that were resolved by a literal/synonym match. Mutates frozen records in
+    place via object.__setattr__ — best-effort, for the UI inspection view.
+    """
+    if not records:
+        return
+    sentence_model, _ = _get_models(cfg.embedding_model)
+    keyword_embedding = sentence_model.encode(search_keyword, convert_to_tensor=True)
+    paragraph_embeddings = _encode_texts(sentence_model, list(paragraphs), cfg)
+    scores = _cosine_scores(keyword_embedding, paragraph_embeddings)
+    for record in records:
+        if 0 <= record.index < len(scores):
+            object.__setattr__(record, "cosine_sim_score", round(float(scores[record.index]), 6))
+
+
 def run_keybert_matching(
     paragraphs: List[str],
     search_keyword: str,
@@ -392,6 +414,15 @@ def run_keybert_matching(
             matched.append(record)
         else:
             unmatched.append(record)
+
+    # Ensure EVERY chunk carries a cosine score vs the keyword so the UI's
+    # interactive threshold view can show and re-classify all chunks (literal /
+    # synonym matches are resolved without a cosine score otherwise). This is a
+    # single extra embedding pass over the paragraphs.
+    try:
+        _backfill_all_chunk_scores(matched + unmatched, paragraphs, search_keyword, cfg)
+    except Exception:
+        pass  # scoring is a best-effort inspection aid; never fail the run
 
     logging_payload = save_keybert_result(
         matched=matched,

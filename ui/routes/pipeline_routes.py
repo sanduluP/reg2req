@@ -127,15 +127,35 @@ def start_pipeline_run():
     if not keyword:
         return jsonify({"error": "Missing query param: keyword"}), 400
 
-    # Complete trustworthy-AI scan: the UI sends a sentinel; expand it to the
-    # full curated dimension list. A single keyword stays a one-element list.
+    # Keyword scenarios (sentinels sent by the UI):
+    #   __ALL_DIMENSIONS__ -> complete scan over the curated dimension list
+    #   __CUSTOM__         -> user-supplied keyword(s) from `custom_keywords`
+    #   __NO_KEYWORD__     -> whole-document extraction, no chunk filtering
+    #   <anything else>    -> a single predefined dimension / keyword
     ALL_DIMENSIONS = "__ALL_DIMENSIONS__"
+    CUSTOM = "__CUSTOM__"
+    NO_KEYWORD = "__NO_KEYWORD__"
+    filter_chunks = True
+
+    src = request.form if request.form else request.args
+
     if keyword == ALL_DIMENSIONS:
         from ..services.search_keywords_service import load_search_keywords
         dimensions = list(load_search_keywords())
         if not dimensions:
             return jsonify({"error": "No trustworthy-AI dimensions are configured for a complete scan."}), 400
         keyword_label = "All dimensions"
+    elif keyword == NO_KEYWORD:
+        dimensions = []
+        filter_chunks = False
+        keyword_label = "Whole document"
+    elif keyword == CUSTOM:
+        raw = src.get("custom_keywords") or ""
+        dimensions = [k.strip() for k in raw.replace("\n", ",").split(",") if k.strip()]
+        dimensions = list(dict.fromkeys(dimensions))
+        if not dimensions:
+            return jsonify({"error": "Custom keyword mode selected but no keywords were provided."}), 400
+        keyword_label = "Custom: " + ", ".join(dimensions)
     else:
         dimensions = [keyword]
         keyword_label = keyword
@@ -169,6 +189,7 @@ def start_pipeline_run():
                 keyword=keyword_label,
                 keywords=dimensions,
                 cfg=cfg,
+                filter_chunks=filter_chunks,
             )
             JOB_STORE.set_done(job.job_id, result)
         except Exception as e:
