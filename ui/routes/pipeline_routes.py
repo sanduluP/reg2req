@@ -204,6 +204,55 @@ def start_pipeline_run():
     return jsonify({"job_id": job.job_id})
 
 
+@pipeline_bp.post("/extend-extraction")
+def extend_extraction_route():
+    """
+    Incrementally extend extraction for chunks newly included by a lower
+    relevance threshold (decompose + classify only the delta).
+
+    Request (JSON)
+    --------------
+    { "source_job_id": "<run job id>", "threshold": <float> }
+
+    Response
+    --------
+    { "job_id": "<uuid>" }   # poll like any other job; result has new results
+
+    404 if the run context is gone (e.g. server restarted) — the UI then falls
+    back to the manual re-run hint.
+    """
+    from ui.services.extraction_context import EXTRACTION_CONTEXT_STORE
+    from ui.services.incremental_extraction import extend_extraction
+
+    payload = request.get_json(silent=True) or {}
+    source_job_id = str(payload.get("source_job_id") or "").strip()
+    try:
+        threshold = float(payload.get("threshold"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Missing or invalid 'threshold'."}), 400
+
+    if not source_job_id:
+        return jsonify({"error": "Missing 'source_job_id'."}), 400
+
+    context = EXTRACTION_CONTEXT_STORE.get(source_job_id)
+    if context is None:
+        return jsonify({"error": "No cached run context for this job (it may have expired)."}), 404
+
+    job = JOB_STORE.create_job()
+
+    def worker() -> None:
+        try:
+            JOB_STORE.set_running(job.job_id)
+            result = extend_extraction(context, threshold, job_id=job.job_id)
+            JOB_STORE.set_done(job.job_id, result)
+        except Exception as e:
+            traceback.print_exc()
+            JOB_STORE.set_error(job.job_id, str(e))
+
+    Thread(target=worker, daemon=True).start()
+    return jsonify({"job_id": job.job_id})
+
+
 @pipeline_bp.get("/jobs/<job_id>")
 def get_job_status(job_id: str):
     """

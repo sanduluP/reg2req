@@ -34,10 +34,13 @@ from ui.services.json_sanitize import to_jsonable
 from ui.services.progress_callbacks import init_stage, make_job_progress_callback
 from ui.services.dimension_scan import (
     assign_paragraph_dimensions,
+    attach_chunk_relevance_to_results,
     attach_dimensions_to_results,
+    build_paragraph_relevance,
     build_quality_dimensions,
     dedup_qualities,
 )
+from ui.services.extraction_context import EXTRACTION_CONTEXT_STORE, ExtractionContext
 
 
 def _source_context_lookup(decomposer_log: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -193,6 +196,13 @@ def run_pipeline(
     # ---------------------------
     total_par = len(all_paragraphs)
 
+    # Hoisted so the chunk-relevance tagging after novelty (which maps a quality's
+    # decompose position back to its original paragraph score) can see them in
+    # both branches. Whole-document mode leaves chunk_scores empty -> no filtering.
+    chunk_scores_by_dimension: Dict[str, Any] = {}
+    matched_indices: List[int] = []
+    dims_by_paragraph_index: Dict[int, set] = {}
+
     if not filter_chunks:
         # Scenario 3 — no keyword: there is nothing to drop or prioritise, so
         # skip KeyBERT and decompose the WHOLE document (text -> graph).
@@ -204,6 +214,7 @@ def run_pipeline(
             total=1,
         )
         matched_docs = list(all_paragraphs)
+        matched_indices = list(range(len(matched_docs)))  # identity (no filtering)
         dims_by_decompose_index = {pos: set() for pos in range(len(matched_docs))}
         keybert_log = {
             "skipped": True,
@@ -232,7 +243,6 @@ def run_pipeline(
         matched_docs_by_dimension: Dict[str, List[Document]] = {}
         keybert_logs_by_dimension: Dict[str, Any] = {}
         # DEBUG/TEST FEATURE (safe to remove): per-dimension chunk scores for the UI.
-        chunk_scores_by_dimension: Dict[str, Any] = {}
         for dim_idx, dimension in enumerate(dimensions, start=1):
             init_stage(
                 job_id=job_id,
@@ -400,6 +410,13 @@ def run_pipeline(
         _attach_source_context(novelty_results, quality_source_lookup)
         # Tag each reviewed quality with the dimension(s) it belongs to.
         attach_dimensions_to_results(novelty_results, quality_dimensions)
+        # Tag each quality with its source chunk's relevance score so the UI can
+        # live-filter qualities as the reviewer drags the relevance threshold.
+        attach_chunk_relevance_to_results(
+            novelty_results,
+            matched_indices=matched_indices,
+            chunk_scores_by_dimension=chunk_scores_by_dimension,
+        )
 
 
     response: Dict[JobProgressStage | str, Dict] = {
@@ -423,6 +440,32 @@ def run_pipeline(
         "scan_mode": scan_mode,
         "filter_chunks": filter_chunks,
     }
+
+    # Cache the run context so the UI can incrementally extend extraction when the
+    # reviewer lowers the relevance threshold below the run value (decompose only
+    # the newly-included paragraphs instead of re-running the whole pipeline).
+    # Only meaningful when chunks were scored (filter mode).
+    if filter_chunks and chunk_scores_by_dimension:
+        try:
+            EXTRACTION_CONTEXT_STORE.save(
+                ExtractionContext(
+                    job_id=job_id,
+                    all_paragraphs=list(all_paragraphs),
+                    dimensions=list(dimensions),
+                    cfg=cfg,
+                    para_relevance=build_paragraph_relevance(chunk_scores_by_dimension),
+                    dims_by_paragraph_index={
+                        int(k): set(v) for k, v in dims_by_paragraph_index.items()
+                    },
+                    chunk_scores_by_dimension=chunk_scores_by_dimension,
+                    kg_relations=list(kg_relations),
+                    run_threshold=float(keybert_log.get("para_threshold", 0.45)),
+                    decomposed_indices=set(int(i) for i in matched_indices),
+                    existing_qualities=set(str(q).strip() for q in qualities),
+                )
+            )
+        except Exception:
+            pass  # context caching is a best-effort optimization; never fail a run
 
     return to_jsonable(response)
 

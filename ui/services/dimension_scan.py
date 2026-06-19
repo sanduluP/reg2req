@@ -107,3 +107,82 @@ def attach_dimensions_to_results(
         quality = str(item.get("quality") or "").strip()
         dims = quality_dims.get(quality)
         item["dimensions"] = sorted(dims) if dims else []
+
+
+_LITERAL_MATCH_TYPES = ("exact", "synonym")
+
+
+def build_paragraph_relevance(
+    chunk_scores_by_dimension: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[int, dict[str, Any]]:
+    """
+    Collapse per-dimension chunk scores into one relevance entry per paragraph.
+
+    A paragraph can match several dimensions with different cosine scores. For
+    the purpose of "is this paragraph still included at threshold T" we keep the
+    most permissive view: the MAX score across the dimensions that matched it,
+    and ``literal=True`` if any dimension matched it literally (literal/synonym
+    matches are always kept regardless of the threshold).
+
+    Returns ``{paragraph_index -> {"score": float|None, "literal": bool}}`` where
+    ``paragraph_index`` is the index into the original paragraph list.
+    """
+    relevance: dict[int, dict[str, Any]] = {}
+    for chunks in (chunk_scores_by_dimension or {}).values():
+        for chunk in chunks or []:
+            if not isinstance(chunk, Mapping):
+                continue
+            idx = chunk.get("index")
+            if not isinstance(idx, int):
+                continue
+            is_literal = chunk.get("match_type") in _LITERAL_MATCH_TYPES
+            raw_score = chunk.get("score")
+            score = float(raw_score) if isinstance(raw_score, (int, float)) else None
+
+            entry = relevance.get(idx)
+            if entry is None:
+                relevance[idx] = {"score": score, "literal": is_literal}
+                continue
+            if is_literal:
+                entry["literal"] = True
+            if score is not None and (entry["score"] is None or score > entry["score"]):
+                entry["score"] = score
+    return relevance
+
+
+def attach_chunk_relevance_to_results(
+    results: Iterable[dict[str, Any]],
+    *,
+    matched_indices: Sequence[int],
+    chunk_scores_by_dimension: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> None:
+    """
+    Tag each novelty result with its source chunk's relevance so the UI can
+    live-filter qualities as the reviewer drags the relevance threshold.
+
+    Each result carries ``source_context.source_doc_index`` = the position of its
+    paragraph in the decomposer input (``matched_docs``). ``matched_indices`` maps
+    that position back to the original paragraph index, which keys the relevance
+    map built from the per-dimension chunk scores.
+
+    Sets on each result:
+      - ``source_chunk_score``  : float | None (None = always kept, e.g. literal
+                                  match or whole-document mode without scores)
+      - ``source_chunk_literal``: bool
+    """
+    relevance = build_paragraph_relevance(chunk_scores_by_dimension)
+    if not relevance:
+        return
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        ctx = item.get("source_context")
+        pos = ctx.get("source_doc_index") if isinstance(ctx, Mapping) else None
+        if not isinstance(pos, int) or not (0 <= pos < len(matched_indices)):
+            continue
+        orig_index = matched_indices[pos]
+        entry = relevance.get(orig_index)
+        if entry is None:
+            continue
+        item["source_chunk_score"] = entry["score"]
+        item["source_chunk_literal"] = bool(entry["literal"])

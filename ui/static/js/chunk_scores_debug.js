@@ -45,6 +45,7 @@ function isKept(chunk, threshold) {
  */
 export function renderChunkScoresDebug(pipelineResult) {
     const container = el("chunk-scores-debug");
+    const wrap = el("chunk-scores-wrap");
     if (!container) return;
 
     const keybert = pipelineResult?.KeyBERT || {};
@@ -52,7 +53,7 @@ export function renderChunkScoresDebug(pipelineResult) {
     const dims = Object.keys(byDim);
 
     if (!dims.length) {
-        container.classList.add("d-none");
+        if (wrap) wrap.classList.add("d-none");
         container.innerHTML = "";
         return;
     }
@@ -61,7 +62,14 @@ export function renderChunkScoresDebug(pipelineResult) {
     state.threshold = typeof keybert.para_threshold === "number" ? keybert.para_threshold : 0.45;
     state.activeDim = dims.includes(state.activeDim) ? state.activeDim : dims[0];
 
-    container.classList.remove("d-none");
+    if (wrap) wrap.classList.remove("d-none");
+
+    // Auto-expand the collapse when new scores arrive
+    const collapse = el("chunk-scores-collapse");
+    if (collapse && !collapse.classList.contains("show")) {
+        window.bootstrap?.Collapse?.getOrCreateInstance(collapse)?.show();
+    }
+
     render(container);
 }
 
@@ -76,6 +84,10 @@ function render(container) {
     });
 
     const keptCount = chunks.filter(c => isKept(c, state.threshold)).length;
+
+    // Keep the collapsible toggle header in sync with the live count
+    const toggleInfo = el("chunk-scores-toggle-info");
+    if (toggleInfo) toggleInfo.textContent = `${keptCount}/${chunks.length} included`;
 
     const dimOptions = dims.map(d =>
         `<option value="${escapeHtml(d)}" ${d === state.activeDim ? "selected" : ""}>${escapeHtml(d)} (${(state.byDimension[d] || []).length})</option>`
@@ -153,6 +165,9 @@ function applyThreshold(container, value) {
     setPipelineThreshold("para_threshold", v);
     // Re-render rows + summary (cheap, client-side).
     render(container);
+    // Notify the oversight view so it can live-filter the extracted qualities
+    // by this same relevance threshold (debounced on the listener side).
+    document.dispatchEvent(new CustomEvent("kb:chunk-threshold-change", { detail: { threshold: v } }));
 }
 
 function wire(container) {

@@ -5,7 +5,7 @@
  * Triplet extraction starts automatically from the same normalized review list.
  */
 
-import { startTripletExtractionJob, getJobStatus } from "./pipeline_client.js";
+import { startTripletExtractionJob, getJobStatus, startExtendExtractionJob } from "./pipeline_client.js";
 import { getExtractionSettings } from "./extraction_settings_controller.js";
 import { showOversightOverlay, hideOversightOverlay } from "./oversight_overlay.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
@@ -21,6 +21,25 @@ let grouped = null;
 let allNoveltyResults = [];
 let tripletExtractionInFlight = false;
 let tripletExtractionGeneration = 0;
+
+// Live relevance-threshold filtering. Qualities are decomposed once, from the
+// chunks that passed the run-time threshold. Dragging the relevance slider can
+// accurately FILTER DOWN (drop qualities whose source chunk now scores below the
+// threshold); it cannot reveal qualities for chunks that were never decomposed,
+// so going below the run threshold only surfaces a "re-run" hint.
+let runThreshold = null;      // para_threshold at run time
+let currentThreshold = null;  // live threshold from the chunk panel slider
+
+// Auto-extend state: lowering the slider below `extractedFloor` triggers a
+// debounced, incremental extraction of the newly-included chunks (decompose +
+// classify only the delta). `extractedFloor` tracks the lowest threshold we have
+// already extracted down to (starts at the run threshold).
+let runJobId = null;
+let extractedFloor = null;
+let extendInFlight = false;
+let extendGeneration = 0;
+let autoExtendDisabled = false;   // set if the run context expired (manual fallback)
+let pendingExtendThreshold = null; // coalesce drags that happen mid-extend
 
 // Qualities waiting for the user to launch triplet extraction. Extraction is
 // NOT auto-fired anymore: the human configures the extraction profile first,
@@ -57,6 +76,10 @@ function normalizeReviewResults(results) {
       source_context: item?.source_context ?? null,
       max_score: Number.isFinite(Number(item?.max_score)) ? Number(item.max_score) : null,
       matched_neighbor_sentence: String(item?.matched_neighbor_sentence || "").trim(),
+      // Source chunk relevance (for live threshold filtering). null score means
+      // "always included" (literal match or whole-document mode without scores).
+      source_chunk_score: Number.isFinite(Number(item?.source_chunk_score)) ? Number(item.source_chunk_score) : null,
+      source_chunk_literal: Boolean(item?.source_chunk_literal),
     };
 
     const key = stableReviewId(reviewItem);
@@ -76,6 +99,86 @@ function groupByDecision(results) {
     PARTIALLY_NEW: filterBy("PARTIALLY_NEW"),
     NEW: filterBy("NEW"),
   };
+}
+
+/**
+ * Whether a quality survives the current relevance threshold. Literal/synonym
+ * matches and qualities without a known chunk score are always kept.
+ */
+function isResultIncluded(result, threshold) {
+  if (threshold == null) return true;
+  if (result?.source_chunk_literal) return true;
+  const s = result?.source_chunk_score;
+  if (s == null || !Number.isFinite(Number(s))) return true;
+  return Number(s) >= threshold;
+}
+
+/** The qualities currently included under the live threshold. */
+function getIncludedResults() {
+  return allNoveltyResults.filter(r => isResultIncluded(r, currentThreshold));
+}
+
+/**
+ * React to the relevance slider: re-filter qualities, re-render the decision
+ * tables, refresh the pending triplet set, and update the summary. Pure
+ * client-side — no LLM, no network. Cheap enough to run on every slider tick,
+ * but debounced by the caller.
+ */
+export function applyRelevanceThresholdToQualities(threshold) {
+  const t = Number(threshold);
+  currentThreshold = Number.isFinite(t) ? t : null;
+  if (!allNoveltyResults.length) return;
+
+  const included = getIncludedResults();
+  grouped = groupByDecision(included);
+  renderDecision("EXISTING", 1);
+  renderDecision("PARTIALLY_NEW", 1);
+  renderDecision("NEW", 1);
+
+  // The included set is what "Extract triplets" will process — this is how the
+  // threshold efficiently decides which chunks feed quality/triplet extraction.
+  if (!tripletExtractionInFlight) {
+    pendingTripletItems = toTripletExtractionItems(included);
+    syncExtractTripletsButton();
+  }
+  updateQualitySummary();
+}
+
+/** Update the "X of Y qualities included" summary + below-run-threshold hint. */
+function updateQualitySummary() {
+  const el = document.getElementById("oversight-quality-summary");
+  if (!el) return;
+
+  const total = allNoveltyResults.length;
+  if (!total || currentThreshold == null) {
+    el.classList.add("d-none");
+    el.innerHTML = "";
+    return;
+  }
+
+  const included = getIncludedResults().length;
+  const belowFloor = extractedFloor != null && currentThreshold < extractedFloor - 1e-9;
+
+  const parts = [
+    `<i class="bi bi-funnel me-1"></i><span class="fw-semibold">${included}</span> of ${total} qualities included `,
+    `<span class="text-muted">(relevance ≥ ${currentThreshold.toFixed(2)})</span>`,
+  ];
+
+  if (extendInFlight) {
+    parts.push(
+      ` · <span class="text-primary"><span class="spinner-border spinner-border-sm me-1" `,
+      `style="width:.7rem;height:.7rem;border-width:1.5px;" role="status" aria-hidden="true"></span>`,
+      `auto-extracting newly included chunks…</span>`
+    );
+  } else if (autoExtendDisabled && belowFloor) {
+    // Auto-extend unavailable (e.g. server restarted and lost the run context).
+    parts.push(
+      ` · <span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>`,
+      `auto-extract unavailable; re-run to extract qualities from newly included chunks</span>`
+    );
+  }
+  el.className = "small mt-1 text-secondary";
+  el.innerHTML = parts.join("");
 }
 
 function paginate(items, page, pageSize) {
@@ -217,11 +320,26 @@ function summarizeTripletJobResult(jobResult, qualitiesSent) {
 /**
  * Public entrypoint: call this when pipeline finishes.
  */
-export function renderHumanOversightFromPipelineResult(pipelineResult) {
+export function renderHumanOversightFromPipelineResult(pipelineResult, runContext = {}) {
   const novelty = pipelineResult?.NoveltyLLM;
   const results = Array.isArray(novelty?.results) ? novelty.results : [];
   allNoveltyResults = normalizeReviewResults(results);
-  grouped = groupByDecision(allNoveltyResults);
+
+  // Threshold the qualities were extracted at; the slider starts here so the
+  // initial view shows every extracted quality.
+  const para = Number(pipelineResult?.KeyBERT?.para_threshold);
+  runThreshold = Number.isFinite(para) ? para : null;
+  currentThreshold = runThreshold;
+
+  // Auto-extend bookkeeping: we have extracted down to the run threshold so far.
+  runJobId = runContext?.jobId || null;
+  extractedFloor = runThreshold;
+  extendInFlight = false;
+  autoExtendDisabled = false;
+  pendingExtendThreshold = null;
+  ++extendGeneration;
+
+  grouped = groupByDecision(getIncludedResults());
 
   renderDecision("EXISTING", 1);
   renderDecision("PARTIALLY_NEW", 1);
@@ -233,9 +351,10 @@ export function renderHumanOversightFromPipelineResult(pipelineResult) {
   syncGoToTripletsButton();
   wireGoToTripletsButton();
 
-  const selectedItems = toTripletExtractionItems(allNoveltyResults);
+  const selectedItems = toTripletExtractionItems(getIncludedResults());
   ++tripletExtractionGeneration;
   pendingTripletItems = selectedItems;
+  updateQualitySummary();
 
   if (!selectedItems.length) {
     setTripletStatus("Triplet extraction: no reviewed qualities available.");
@@ -387,6 +506,114 @@ async function runTripletExtractionJobForItems(selectedItems, {
 export function wireHumanOversightSubmit() {
   wireGoToTripletsButton();
   wireExtractTripletsButton();
+  wireRelevanceThresholdSync();
+}
+
+/**
+ * Listen for the chunk-relevance slider (in the chunk-scores panel):
+ *   - filter the already-extracted qualities instantly (90ms debounce), and
+ *   - auto-extend extraction to newly-included chunks once the drag settles
+ *     (700ms debounce) — this is the LLM step, so it only fires when the user
+ *     stops moving the slider.
+ */
+let filterDebounce = null;
+let extendDebounce = null;
+function wireRelevanceThresholdSync() {
+  if (document.body.dataset.relevanceSyncWired) return;
+  document.body.dataset.relevanceSyncWired = "1";
+
+  document.addEventListener("kb:chunk-threshold-change", (e) => {
+    const threshold = e?.detail?.threshold;
+
+    // Instant client-side filtering (cheap).
+    if (filterDebounce) clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(() => applyRelevanceThresholdToQualities(threshold), 90);
+
+    // Debounced incremental extraction (LLM) once dragging settles.
+    if (extendDebounce) clearTimeout(extendDebounce);
+    extendDebounce = setTimeout(() => maybeAutoExtend(threshold), 700);
+  });
+}
+
+/** Build the merge-key set so new results don't duplicate existing ones. */
+function mergeNewResults(newResults) {
+  const existingKeys = new Set(allNoveltyResults.map(stableReviewId));
+  let added = 0;
+  for (const r of newResults) {
+    const key = stableReviewId(r);
+    if (existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    allNoveltyResults.push(r);
+    added += 1;
+  }
+  return added;
+}
+
+/**
+ * If the threshold dropped below what we've already extracted, kick off a
+ * debounced incremental extraction for the newly-included chunks.
+ */
+function maybeAutoExtend(threshold) {
+  const t = Number(threshold);
+  if (!Number.isFinite(t)) return;
+  if (!runJobId || autoExtendDisabled) return;          // no context / gave up
+  if (extractedFloor == null || t >= extractedFloor - 1e-9) return; // nothing new below floor
+
+  if (extendInFlight) {
+    // Remember the lowest threshold requested while busy; run it after.
+    pendingExtendThreshold = pendingExtendThreshold == null ? t : Math.min(pendingExtendThreshold, t);
+    return;
+  }
+  void runAutoExtend(t);
+}
+
+async function runAutoExtend(threshold) {
+  extendInFlight = true;
+  const generation = extendGeneration;
+  updateQualitySummary();  // shows the "extracting…" state
+
+  try {
+    const start = await startExtendExtractionJob({ source_job_id: runJobId, threshold });
+    const jobId = start?.job_id;
+    if (!jobId) throw new Error("No job id returned for extend extraction.");
+
+    let result = null;
+    while (true) {
+      const job = await getJobStatus(jobId);
+      if (job.state === "done") { result = job.result; break; }
+      if (job.state === "error") throw new Error(job.error || "Extend extraction failed.");
+      await sleep(800);
+    }
+
+    // A newer run replaced this one while we waited — discard.
+    if (generation !== extendGeneration) return;
+
+    const newResults = normalizeReviewResults(result?.results || []);
+    const added = mergeNewResults(newResults);
+
+    // We've now extracted down to this threshold.
+    extractedFloor = Math.min(extractedFloor ?? threshold, threshold);
+
+    // Re-group + re-render at whatever the current slider value is.
+    applyRelevanceThresholdToQualities(currentThreshold);
+
+    if (added > 0) {
+      setTripletStatus(`Auto-extracted ${added} new qualities from chunks above relevance ${threshold.toFixed(2)}.`);
+    }
+  } catch (e) {
+    console.error("Auto-extend failed:", e);
+    // Stop hammering; fall back to the manual re-run hint.
+    autoExtendDisabled = true;
+  } finally {
+    extendInFlight = false;
+    updateQualitySummary();
+    // Coalesced lower request arrived during this extend — process it.
+    if (!autoExtendDisabled && pendingExtendThreshold != null) {
+      const next = pendingExtendThreshold;
+      pendingExtendThreshold = null;
+      if (extractedFloor != null && next < extractedFloor - 1e-9) void runAutoExtend(next);
+    }
+  }
 }
 
 function sleep(ms) {
@@ -460,11 +687,20 @@ export function wireExtractTripletsButton() {
 export function resetHumanOversightUI() {
   allNoveltyResults = [];
   grouped = null;
+  runThreshold = null;
+  currentThreshold = null;
+  runJobId = null;
+  extractedFloor = null;
+  extendInFlight = false;
+  autoExtendDisabled = false;
+  pendingExtendThreshold = null;
+  ++extendGeneration;
   tripletExtractionInFlight = false;
   tripletExtractionGeneration += 1;
   pendingTripletItems = [];
   syncExtractTripletsButton();
   setTripletStatus("Triplet extraction: waiting for reviewed qualities.");
+  updateQualitySummary();
 
   ["existing", "partially_new", "new"].forEach((k) => {
     const pane = document.querySelector(`#oversight-${k} .qualities-container`);

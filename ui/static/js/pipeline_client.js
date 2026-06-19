@@ -28,6 +28,20 @@ export async function getJobStatus(jobId) {
   return fetchJson(`/api/pipeline/jobs/${encodeURIComponent(jobId)}`);
 }
 
+/**
+ * Incrementally extend extraction to chunks newly included by a lower relevance
+ * threshold. Returns { job_id } to poll; the result carries the new results.
+ * The HTTP 404 (context expired) is surfaced so the caller can fall back to the
+ * manual re-run hint.
+ */
+export async function startExtendExtractionJob({ source_job_id, threshold }) {
+  return fetchJson("/api/pipeline/extend-extraction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_job_id, threshold }),
+  });
+}
+
 
 export async function startTripletExtractionJob({ selected_items, extraction_settings }) {
   return fetchJson("/api/pipeline/triplet-extraction", {

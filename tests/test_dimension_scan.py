@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from ui.services.dimension_scan import (
     assign_paragraph_dimensions,
+    attach_chunk_relevance_to_results,
     attach_dimensions_to_results,
+    build_paragraph_relevance,
     build_quality_dimensions,
     dedup_qualities,
 )
@@ -65,3 +67,60 @@ def test_attach_dimensions_to_results_sets_sorted_list() -> None:
 
     assert results[0]["dimensions"] == ["Fairness", "Transparency"]  # sorted
     assert results[1]["dimensions"] == []
+
+
+def test_build_paragraph_relevance_keeps_max_score_and_any_literal() -> None:
+    chunk_scores = {
+        "Fairness": [
+            {"index": 0, "match_type": "near_paragraph_global", "score": 0.40},
+            {"index": 1, "match_type": "exact", "score": None},  # literal
+        ],
+        "Transparency": [
+            {"index": 0, "match_type": "near_paragraph_global", "score": 0.62},  # higher
+        ],
+    }
+
+    rel = build_paragraph_relevance(chunk_scores)
+
+    # Paragraph 0: max score across dims; not literal.
+    assert rel[0] == {"score": 0.62, "literal": False}
+    # Paragraph 1: literal match -> always kept, score unknown.
+    assert rel[1] == {"score": None, "literal": True}
+
+
+def test_attach_chunk_relevance_maps_decompose_pos_to_paragraph_score() -> None:
+    # decompose positions 0,1 map back to original paragraphs 5, 9
+    matched_indices = [5, 9]
+    chunk_scores = {
+        "Fairness": [
+            {"index": 5, "match_type": "near_paragraph_global", "score": 0.71},
+            {"index": 9, "match_type": "synonym", "score": None},  # literal
+        ],
+    }
+    results = [
+        {"quality": "q1", "source_context": {"source_doc_index": 0}},
+        {"quality": "q2", "source_context": {"source_doc_index": 1}},
+        {"quality": "q3", "source_context": {"source_doc_index": 2}},  # out of range
+        {"quality": "q4"},  # no source context
+    ]
+
+    attach_chunk_relevance_to_results(
+        results,
+        matched_indices=matched_indices,
+        chunk_scores_by_dimension=chunk_scores,
+    )
+
+    assert results[0]["source_chunk_score"] == 0.71
+    assert results[0]["source_chunk_literal"] is False
+    assert results[1]["source_chunk_score"] is None
+    assert results[1]["source_chunk_literal"] is True
+    assert "source_chunk_score" not in results[2]
+    assert "source_chunk_score" not in results[3]
+
+
+def test_attach_chunk_relevance_noop_without_scores() -> None:
+    results = [{"quality": "q1", "source_context": {"source_doc_index": 0}}]
+    attach_chunk_relevance_to_results(
+        results, matched_indices=[3], chunk_scores_by_dimension={}
+    )
+    assert "source_chunk_score" not in results[0]

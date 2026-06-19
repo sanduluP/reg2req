@@ -21,7 +21,29 @@ import { hideProgressPanel } from "./pipeline_progress_ui.js"
 // Optional modules (TODO: Most likely will be deleted)
 // import { wireGraphSearch } from "./graph_free_text_search.js";
 
+function initSettingsSidebar() {
+  const sidebar = document.getElementById("oversight-settings-sidebar");
+  const toggleBtn = document.getElementById("settings-sidebar-toggle");
+  const icon = document.getElementById("sidebar-toggle-icon");
+  const strip = sidebar?.querySelector(".sidebar-collapsed-strip");
+  if (!sidebar || !toggleBtn) return;
+
+  const LS_KEY = "kb.settings.sidebar.state";
+
+  const applyState = (collapsed) => {
+    sidebar.classList.toggle("sidebar-collapsed", collapsed);
+    if (icon) icon.className = `bi ${collapsed ? "bi-arrow-bar-right" : "bi-arrow-bar-left"}`;
+    localStorage.setItem(LS_KEY, collapsed ? "1" : "0");
+  };
+
+  applyState(localStorage.getItem(LS_KEY) === "1");
+
+  toggleBtn.addEventListener("click", () => applyState(!sidebar.classList.contains("sidebar-collapsed")));
+  strip?.addEventListener("click", () => applyState(false));
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  initSettingsSidebar();
   // ---------------------------------------------------------------------------
   // 1) Graph initialize (Cytoscape)
   // ---------------------------------------------------------------------------
@@ -51,8 +73,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     fileInputId: "documents",
     keywordSelectId: "keyword-select",
     runBtnId: "pipeline-run-btn",
-    onDone: (result) => {
-      renderHumanOversightFromPipelineResult(result);
+    onDone: (result, ctx) => {
+      renderHumanOversightFromPipelineResult(result, ctx);
       // Refresh Compare tab source inventory with the newly processed documents
       refreshComparisonSources();
       // DEBUG/TEST (safe to remove): show per-chunk KeyBERT scores.
@@ -67,6 +89,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Tunable pipeline thresholds (paragraph relevance, KG similarity, top-k, limit)
   initPipelineTuning({ containerId: "pipeline-tuning" });
+
+  // "Tune thresholds" toolbar shortcut → jump to Review tab, open sidebar, expand thresholds
+  document.getElementById("jump-to-thresholds")?.addEventListener("click", () => {
+    document.getElementById("oversight-view-tab")?.click();
+    const sidebar = document.getElementById("oversight-settings-sidebar");
+    if (sidebar?.classList.contains("sidebar-collapsed")) {
+      document.getElementById("settings-sidebar-toggle")?.click();
+    }
+    const section = document.getElementById("sb-pipeline-section");
+    if (section && !section.classList.contains("show")) {
+      window.bootstrap?.Collapse?.getOrCreateInstance(section)?.show();
+    }
+    // Scroll threshold panel into view after expand animation
+    setTimeout(() => document.getElementById("pipeline-tuning")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 320);
+  });
 
   // ---------------------------------------------------------------------------
   // 4) Compare tab (cross-document overlap / alignment / conflicts / ambiguity)

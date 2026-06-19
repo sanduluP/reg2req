@@ -242,7 +242,7 @@ export function wirePipelineRunControls({
           syncRunUi();
 
           hideProgressPanel();
-          onDone?.(job.result);
+          onDone?.(job.result, { jobId });
           return;
         }
 

@@ -56,13 +56,12 @@ body {
 
 .pipeline-toolbar {
   display: grid;
-  /* Cap the inputs so Focus area / Documents stay comfortable instead of
-     stretching the full width; the last (flexible) track pushes Run right. */
   grid-template-columns:
-    minmax(170px, 200px)
-    minmax(190px, 240px)
-    minmax(210px, 260px)
-    minmax(0, 1fr);
+    minmax(160px, 190px)   /* Init */
+    minmax(180px, 230px)   /* Focus */
+    minmax(200px, 250px)   /* Documents */
+    minmax(140px, 170px)   /* Tune thresholds shortcut */
+    auto;                  /* Run */
   align-items: start;
   column-gap: 1rem;
   row-gap: 0.5rem;
@@ -144,20 +143,40 @@ body {
   flex: 0 0 auto;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
+  .pipeline-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pipeline-actions { justify-self: start; }
+}
+
+@media (max-width: 560px) {
   .pipeline-toolbar {
     grid-template-columns: 1fr;
   }
-
-  .pipeline-actions {
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .pipeline-actions .btn:first-child {
-    flex: 1 1 auto;
-  }
+  .pipeline-actions { justify-self: stretch; width: 100%; }
 }
+
+/* Chunk relevance collapsible toggle */
+.chunk-scores-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.chunk-scores-toggle:hover { background: #f1f5f9; }
+.chunk-scores-toggle .bi-chevron-down { transition: transform 0.18s; }
+.chunk-scores-toggle.collapsed .bi-chevron-down { transform: rotate(-90deg); }
 
 
 /* Utility */
@@ -276,11 +295,9 @@ body {
 }
 
 /* ------------------------------------------------------------
-   Oversight layout: keep everything bounded inside #oversight-view
+   Oversight layout: sidebar + main two-column split
    ------------------------------------------------------------ */
 
-
-/* The section must also be a flex column and shrinkable */
 #oversight-section {
   flex: 1 1 auto;
   height: 100%;
@@ -288,6 +305,142 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+}
+
+/* Outer flex row: sidebar | main */
+.oversight-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Settings sidebar ─────────────────────────────── */
+.oversight-settings-sidebar {
+  width: 284px;
+  min-width: 284px;
+  min-height: 0;       /* allow flex shrink so sidebar-body can scroll */
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  overflow: hidden;
+}
+
+.oversight-settings-sidebar.sidebar-collapsed {
+  width: 38px;
+  min-width: 38px;
+}
+
+.sidebar-panel-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.sidebar-panel-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.15s;
+}
+
+.sidebar-collapsed .sidebar-panel-title {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Thin icon strip visible when sidebar is collapsed */
+.sidebar-collapsed-strip {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.sidebar-collapsed .sidebar-collapsed-strip { display: flex; }
+
+.sidebar-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: opacity 0.15s;
+}
+
+.sidebar-collapsed .sidebar-body {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Accordion section card */
+.sidebar-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sidebar-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #334155;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.12s;
+}
+
+.sidebar-section-toggle:hover { background: #f8fafc; }
+
+/* Chevron rotates when collapsed */
+.sidebar-section-toggle .chevron {
+  margin-left: auto;
+  font-size: 0.6rem;
+  color: #94a3b8;
+  transition: transform 0.18s;
+  flex-shrink: 0;
+}
+.sidebar-section-toggle.collapsed .chevron { transform: rotate(-90deg); }
+
+.sidebar-section-body {
+  padding: 0.4rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Remove inner borders/bg from widgets that were styled for standalone use */
+.sidebar-section-body .border.rounded { border: none !important; background: transparent !important; }
+
+/* ── Main content area ────────────────────────────── */
+.oversight-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.5rem 0.6rem 0;
 }
 
 /* Oversight table readability */
@@ -332,12 +485,13 @@ body {
   /* keep scrolling inside inner container */
 }
 
-/* The split container should fill the remaining section height */
+/* The split container fills the remaining height inside oversight-main */
 .oversight-split-container {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 /* The top area owns the vertical space; bottom is hidden for now */
