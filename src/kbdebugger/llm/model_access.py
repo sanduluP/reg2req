@@ -35,6 +35,11 @@ MODEL_SERVICE_NAME: Final[str] = os.getenv(
 REQUEST_TIMEOUT: Final[float] = float(os.getenv("REQUEST_TIMEOUT", "30.0")) # seconds
 REQUEST_RETRIES: Final[int] = int(os.getenv("REQUEST_RETRIES", "2"))
 
+# Optional bearer token for hosted OpenAI-compatible APIs (e.g. DeepSeek, OpenAI).
+# Empty means no Authorization header is sent (works for unauthenticated
+# internal services such as the DFKI model server).
+MODEL_API_KEY: Final[str] = os.getenv("MODEL_API_KEY", "").strip()
+
 
 def _load_model_service_extra_body() -> dict[str, Any]:
     raw = os.getenv("MODEL_SERVICE_EXTRA_BODY_JSON", "").strip()
@@ -216,6 +221,13 @@ class HTTPChatResponder:
     model: str
     timeout: float = 60.0
     retries: int = 2
+    api_key: str = ""
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     def invoke(self, inputs: dict[str, Any]) -> str:
         prompt = inputs.get("prompt")
@@ -244,14 +256,14 @@ class HTTPChatResponder:
         for attempt in range(1, self.retries + 2):  # first try + retries
             started = time.perf_counter()
             try:
-                resp = requests.post(self.url, json=data, timeout=self.timeout)
+                resp = requests.post(self.url, json=data, headers=self._headers(), timeout=self.timeout)
                 if resp.status_code == 400 and "response_format" in data:
                     # Some OpenAI-compatible servers do not support structured
                     # output parameters. Keep the JSON-only system prompt and
                     # retry without the incompatible request field.
                     retry_data = dict(data)
                     retry_data.pop("response_format", None)
-                    resp = requests.post(self.url, json=retry_data, timeout=self.timeout)
+                    resp = requests.post(self.url, json=retry_data, headers=self._headers(), timeout=self.timeout)
                 resp.raise_for_status() # Raises HTTPError, if one occurred.
                 payload = resp.json()
                 content = _extract_assistant_content(payload)
@@ -371,6 +383,7 @@ def get_llm_responder() -> LLMResponder:
                 model=MODEL_SERVICE_NAME,
                 timeout=REQUEST_TIMEOUT,
                 retries=REQUEST_RETRIES,
+                api_key=MODEL_API_KEY,
             )
         case _:
             _unsupported_backend(backend)  # NoReturn → type checker knows we never return here
