@@ -200,11 +200,21 @@ body {
   flex: 1;
   position: relative;
   min-height: 0;
+  /* Flex column so the tab bar takes its natural height and the tab content
+     fills the rest (instead of overflowing past the tabs and being clipped,
+     which prevented the settings sidebar from ever scrolling). */
+  display: flex;
+  flex-direction: column;
   border-radius: 0.5rem;
   overflow: hidden;
   background: #f8fafc;
   border: 1px solid #dbe3ee;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+/* Keep the view tab bar at its natural height (don't let it shrink). */
+.graph-wrapper > #view-tabs {
+  flex: 0 0 auto;
 }
 
 /* Cytoscape canvas fills wrapper */
@@ -284,7 +294,10 @@ body {
 
 /* Make tab-content fill graph-wrapper */
 #view-tabs-content {
-  height: 100%;
+  /* Fill the height remaining under the tab bar. height:auto neutralizes
+     Bootstrap's .h-100 (height:100% !important) so flex controls the size. */
+  flex: 1 1 auto;
+  height: auto !important;
   min-height: 0;
 }
 
@@ -386,6 +399,13 @@ body {
   opacity: 0;
   pointer-events: none;
   overflow: hidden;
+}
+
+/* Keep each section at its natural height. Without this, flex children shrink
+   to fit the column and their own overflow:hidden clips the content, so the
+   body never overflows and never scrolls. */
+.sidebar-body > * {
+  flex-shrink: 0;
 }
 
 /* Accordion section card */
