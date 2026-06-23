@@ -58,3 +58,6 @@ experiments/MINE/results/
 experiments/MINE/data/
 experiments/MINE/report/.venv/
 experiments/MINE/logs/
+
+# Claude Code local config
+.claude/
