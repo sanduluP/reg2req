@@ -1177,6 +1177,13 @@ export function resetExtractedTripletsUI() {
         skipped.innerHTML = "";
     }
 
+    // Clear the pre-merge "Check against KB" results panel.
+    const previewWrap = document.getElementById("triplets-preview-wrap");
+    if (previewWrap) {
+        previewWrap.classList.add("d-none");
+        previewWrap.innerHTML = "";
+    }
+
     const countEl = getCountEl();
     if (countEl) countEl.textContent = "0";
 

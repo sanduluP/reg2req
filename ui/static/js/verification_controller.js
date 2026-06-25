@@ -41,6 +41,20 @@ export function hideVerificationPanel() {
   el("verification-panel")?.classList.add("d-none");
 }
 
+/** Hide + clear the verification panel (used when a new pipeline run starts). */
+export function resetVerificationPanel() {
+  lastInput = { sentences: [], allowedPredicates: [] };
+  const panel = el("verification-panel");
+  if (panel) panel.classList.add("d-none");
+  const body = el("verification-body");
+  if (body) body.innerHTML = "";
+  const badge = el("verification-verdict-badge");
+  if (badge) {
+    badge.className = "verification-badge verification-badge-pending";
+    badge.textContent = "…";
+  }
+}
+
 /**
  * Wire the panel buttons + the "Verify graph" menu item. Idempotent.
  */

@@ -16,6 +16,8 @@ import { clearRunContext } from "./state/oversight_state.js";
 import { resetHumanOversightUI, hasCandidateQualitiesUI } from "./oversight_controller.js";
 import { hasTripletsCache, resetExtractedTripletsUI } from "./extracted_triplets_controller.js";
 import { setOversightStep, OversightSteps } from "./oversight_stepper.js";
+import { resetVerificationPanel } from "./verification_controller.js";
+import { clearChunkScoresDebug } from "./chunk_scores_debug.js";
 
 /**
  * Reset the whole "pipeline session".
@@ -40,6 +42,8 @@ export function resetPipelineSession({ fileInputId = "documents" } = {}) {
     // 3) reset controllers UI+state
     resetHumanOversightUI();
     resetExtractedTripletsUI();
+    resetVerificationPanel();
+    clearChunkScoresDebug();
 
     // 4) clear file input (important: allows uploading SAME file again)
     const fileInput = document.getElementById(fileInputId);

@@ -43,6 +43,16 @@ function isKept(chunk, threshold) {
  * Render the panel from a pipeline job result.
  * @param {object} pipelineResult - the /run job result (has KeyBERT.chunk_scores)
  */
+/** Clear + hide the chunk-relevance panel (used when a new run starts). */
+export function clearChunkScoresDebug() {
+    const container = el("chunk-scores-debug");
+    const wrap = el("chunk-scores-wrap");
+    state.byDimension = {};
+    state.activeDim = null;
+    if (container) container.innerHTML = "";
+    if (wrap) wrap.classList.add("d-none");
+}
+
 export function renderChunkScoresDebug(pipelineResult) {
     const container = el("chunk-scores-debug");
     const wrap = el("chunk-scores-wrap");

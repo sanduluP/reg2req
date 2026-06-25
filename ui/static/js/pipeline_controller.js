@@ -11,6 +11,8 @@ import { hasPipelineSession, resetPipelineSession } from "./ui_reset.js";
 import { switchToTopLevelTab, TopLevelTabs } from "./utils/tabs.js";
 import { getPipelineThresholdValues } from "./pipeline_tuning_controller.js";
 import { getKeywordSelection, isKeywordSelectionReady } from "./keyword_dropdown_controller.js";
+import { resetVerificationPanel } from "./verification_controller.js";
+import { clearChunkScoresDebug } from "./chunk_scores_debug.js";
 
 
 /**
@@ -171,6 +173,12 @@ export function wirePipelineRunControls({
       // Nuke old session now (user explicitly agreed)
       resetPipelineSession();
     }
+
+    // Always start a run on clean tabs: even when there was no in-memory
+    // session to confirm (e.g. after a prior Submit-to-KG), clear panels that
+    // would otherwise show stale output from the previous run.
+    resetVerificationPanel();
+    clearChunkScoresDebug();
 
     // --- Start pipeline ---
     isRunning = true;
