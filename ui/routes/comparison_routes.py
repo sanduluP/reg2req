@@ -279,6 +279,66 @@ def post_preview_against_kb():
     return jsonify(report)
 
 
+@comparison_bp.post("/quality-check")
+def start_quality_check():
+    """
+    AI extraction-quality check over a document's extracted triples (pre-merge):
+    faithfulness (hallucinated subject/object), near-duplicate entities, and
+    duplicate relations. Runs as a background job (LLM + embeddings); poll via
+    /api/pipeline/jobs/<job_id>.
+
+    Request (JSON)
+    --------------
+    { "triples": [{"subject","predicate","object","sentence"?}, ...],
+      "run_faithfulness": true }
+
+    Response: { "job_id": "<uuid>" }
+    """
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("triples")
+    if not isinstance(raw, list) or not raw:
+        return jsonify({"error": "Expected a non-empty 'triples' list."}), 400
+
+    triples = []
+    for t in raw:
+        if not isinstance(t, dict):
+            continue
+        subject = str(t.get("subject", "")).strip()
+        predicate = str(t.get("predicate", "")).strip()
+        obj = str(t.get("object", "")).strip()
+        if subject and predicate and obj:
+            triples.append({
+                "subject": subject, "predicate": predicate, "object": obj,
+                "sentence": str(t.get("sentence", "")).strip(),
+            })
+    if not triples:
+        return jsonify({"error": "No valid triples (need subject, predicate, object)."}), 400
+
+    run_faithfulness = payload.get("run_faithfulness", True) is not False
+    job = JOB_STORE.create_job()
+
+    def worker() -> None:
+        from kbdebugger.quality import run_quality_check
+
+        try:
+            JOB_STORE.set_running(job.job_id)
+            JOB_STORE.update_progress(
+                job.job_id,
+                stage="QualityCheck",
+                message="🔬 Checking faithfulness + de-duplicating entities/relations...",
+                current=None,
+                total=None,
+            )
+            report = run_quality_check(triples, run_faithfulness=run_faithfulness)
+            JOB_STORE.set_done(job.job_id, {"quality": report})
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            JOB_STORE.set_error(job.job_id, str(e))
+
+    Thread(target=worker, daemon=True).start()
+    return jsonify({"job_id": job.job_id})
+
+
 @comparison_bp.get("/ambiguity")
 def get_ambiguity_report():
     from kbdebugger.comparison import ambiguity

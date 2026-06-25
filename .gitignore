@@ -30,6 +30,7 @@ Log/data.csv
 credentials/
 /install_log.txt
 /server_log.txt
+/server_err.txt
 
 
 # 🖌️ UI python artifacts

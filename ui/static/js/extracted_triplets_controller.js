@@ -304,6 +304,13 @@ function wireTripletsToolbar() {
         checkBtn.dataset.wired = "1";
         checkBtn.addEventListener("click", () => { void checkAgainstKb(); });
     }
+
+    // AI quality check (faithfulness + entity/relation dedup)
+    const qcBtn = document.getElementById("triplets-quality-check");
+    if (qcBtn && !qcBtn.dataset.wired) {
+        qcBtn.dataset.wired = "1";
+        qcBtn.addEventListener("click", () => { void runQualityCheck(); });
+    }
 }
 
 /** Triples currently included (checked, not deleted), shaped for the preview API. */
@@ -421,6 +428,135 @@ function renderPreviewReport(report) {
     `;
     document.getElementById("kb-preview-close")?.addEventListener("click", () => {
         wrap.classList.add("d-none");
+    });
+}
+
+/* ----------------- AI quality check (faithfulness + dedup) ----------------- */
+
+let _lastQualityReport = null;
+
+async function runQualityCheck() {
+    const wrap = document.getElementById("triplets-quality-wrap");
+    if (!wrap) return;
+
+    const triples = includedTriplesForPreview();
+    if (!triples.length) {
+        showToast({ type: "warning", title: "Nothing to check", message: "Include at least one triplet first." });
+        return;
+    }
+
+    wrap.classList.remove("d-none");
+    wrap.innerHTML =
+        '<div class="text-muted small d-flex align-items-center gap-2 p-2">' +
+        '<span class="spinner-border spinner-border-sm"></span>' +
+        `AI checking ${triples.length} triplet(s): faithfulness + de-duplication…</div>`;
+
+    try {
+        const start = await fetchJson("/api/comparison/quality-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ triples, run_faithfulness: true }),
+        });
+        const jobId = start.job_id;
+        while (true) {
+            const job = await getJobStatus(jobId);
+            if (job.state === "done") { renderQualityReport(job.result?.quality); break; }
+            if (job.state === "error") { throw new Error(job.error || "Quality check failed."); }
+            await sleep(1200);
+        }
+    } catch (e) {
+        wrap.innerHTML = `<div class="alert alert-danger py-2 small mb-0">Quality check failed: ${escapeHtml(e.message || String(e))}</div>`;
+    }
+}
+
+function renderQualityReport(report) {
+    const wrap = document.getElementById("triplets-quality-wrap");
+    if (!wrap) return;
+    if (!report) { wrap.innerHTML = `<div class="text-muted small p-2">No result.</div>`; return; }
+    _lastQualityReport = report;
+
+    const s = report.summary || {};
+    const hallucinated = Array.isArray(report.hallucinated) ? report.hallucinated : [];
+    const entities = Array.isArray(report.entity_duplicates) ? report.entity_duplicates : [];
+    const relDups = Array.isArray(report.relation_duplicates) ? report.relation_duplicates : [];
+
+    const chip = (cls, icon, n, label, blurb) =>
+        `<span class="kb-chip ${cls}" title="${escapeHtml(blurb)}"><i class="bi ${icon}"></i> ${n} ${escapeHtml(label)}</span>`;
+
+    // Hallucinations
+    let hallucHtml = "";
+    if (hallucinated.length) {
+        const rows = hallucinated.map(h => `
+            <div class="kb-item kb-cat-conflict">
+              <div class="kb-triple"><code>${escapeHtml(h.subject)}</code>
+                <span class="kb-pred">${escapeHtml(h.predicate)}</span>
+                <code>${escapeHtml(h.object)}</code></div>
+              <div class="kb-reason">${escapeHtml(h.reason || "")}</div>
+              <div class="kb-side kb-side-doc"><span class="kb-side-tag">Source</span>
+                <div class="kb-sentence">${escapeHtml(h.sentence || "—")}</div></div>
+            </div>`).join("");
+        hallucHtml = `<div class="kb-group">
+            <div class="kb-group-head kb-cat-conflict d-flex align-items-center gap-2">
+              <span><i class="bi bi-exclamation-octagon-fill"></i> Hallucinated subject/object (${hallucinated.length})</span>
+              <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="qc-exclude-halluc" style="font-size:0.7rem;">Exclude all</button>
+            </div>${rows}</div>`;
+    }
+
+    // Entity duplicates
+    let entHtml = "";
+    if (entities.length) {
+        const rows = entities.map(c => `
+            <div class="kb-item kb-cat-related">
+              <div class="kb-triple">
+                ${c.members.map(m => `<code>${escapeHtml(m)}</code>`).join('<span class="kb-pred">≈</span>')}
+              </div>
+              <div class="kb-reason">Same concept — suggest canonical <strong>${escapeHtml(c.canonical)}</strong>
+                ${c.confirmed_by ? `<span class="text-muted">(${escapeHtml(c.confirmed_by)})</span>` : ""}</div>
+            </div>`).join("");
+        entHtml = `<div class="kb-group">
+            <div class="kb-group-head kb-cat-related"><i class="bi bi-diagram-2"></i> Duplicate entities (${entities.length})</div>${rows}</div>`;
+    }
+
+    // Relation duplicates
+    let relHtml = "";
+    if (relDups.length) {
+        const rows = relDups.map(d => `
+            <div class="kb-item kb-cat-existing">
+              <div class="kb-triple"><code>${escapeHtml(d.subject)}</code>
+                <span class="kb-pred">${escapeHtml(d.predicate)}</span>
+                <code>${escapeHtml(d.object)}</code>
+                <span class="badge text-bg-secondary">×${d.count}</span></div>
+              <div class="kb-reason">Same relation appears ${d.count} times — will collapse to one on submit.</div>
+            </div>`).join("");
+        relHtml = `<div class="kb-group">
+            <div class="kb-group-head kb-cat-existing"><i class="bi bi-files"></i> Duplicate relations (${relDups.length})</div>${rows}</div>`;
+    }
+
+    const allClean = !hallucinated.length && !entities.length && !relDups.length;
+
+    wrap.innerHTML = `
+      <div class="kb-preview-head d-flex align-items-center flex-wrap gap-2 mb-2">
+        <span class="fw-semibold small"><i class="bi bi-robot me-1"></i>AI quality check — ${s.total || 0} triplet(s):</span>
+        ${chip("kb-cat-conflict", "bi-exclamation-octagon-fill", s.hallucinated || 0, "Hallucinated", "Subject/object not supported by the source sentence")}
+        ${chip("kb-cat-related", "bi-diagram-2", s.entity_clusters || 0, "Duplicate entities", "Near-synonym entity names to merge")}
+        ${chip("kb-cat-existing", "bi-files", s.relation_duplicates || 0, "Duplicate relations", "Identical relations that collapse on submit")}
+        ${s.unverified ? chip("kb-cat-tension", "bi-question-circle", s.unverified, "Unverified", "Could not be verified (LLM error)") : ""}
+        <button type="button" class="btn btn-sm btn-link p-0 ms-auto" id="qc-close">Hide</button>
+      </div>
+      ${allClean ? '<div class="text-success small p-2"><i class="bi bi-check-circle me-1"></i>No hallucinations or duplicates detected.</div>' : ""}
+      ${hallucHtml}${entHtml}${relHtml}
+    `;
+
+    document.getElementById("qc-close")?.addEventListener("click", () => wrap.classList.add("d-none"));
+    document.getElementById("qc-exclude-halluc")?.addEventListener("click", () => {
+        const flagged = new Set(hallucinated.map(h => `${h.subject}|||${h.predicate}|||${h.object}`));
+        let n = 0;
+        state.rows.forEach(r => {
+            if (flagged.has(`${r.subject}|||${r.predicate}|||${r.object}`) && r.include) { r.include = false; n++; }
+        });
+        renderTripletsTable();
+        updateTripletsCounters();
+        showToast({ type: "success", title: "Excluded", message: `${n} hallucinated triplet(s) excluded from submission.` });
     });
 }
 
@@ -1177,11 +1313,10 @@ export function resetExtractedTripletsUI() {
         skipped.innerHTML = "";
     }
 
-    // Clear the pre-merge "Check against KB" results panel.
-    const previewWrap = document.getElementById("triplets-preview-wrap");
-    if (previewWrap) {
-        previewWrap.classList.add("d-none");
-        previewWrap.innerHTML = "";
+    // Clear the pre-merge "Check against KB" + "AI quality check" panels.
+    for (const id of ["triplets-preview-wrap", "triplets-quality-wrap"]) {
+        const w = document.getElementById(id);
+        if (w) { w.classList.add("d-none"); w.innerHTML = ""; }
     }
 
     const countEl = getCountEl();

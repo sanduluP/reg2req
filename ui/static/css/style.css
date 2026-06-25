@@ -849,6 +849,8 @@ body {
 .verification-flagged li { padding: 0.1rem 0; }
 .verification-flagged-label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #0f172a; }
 .verification-flagged-reason { color: #94a3b8; }
+.verification-flagged-note { opacity: 0.75; }
+.verification-flagged-note .verification-flagged-label { color: #64748b; }
 
 /* ===================================================================== */
 /* Responsive page-scroll layout                                          */

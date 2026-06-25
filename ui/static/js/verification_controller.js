@@ -180,10 +180,16 @@ function renderStrategyRow(s) {
   const flaggedHtml = flagged.length
     ? `<ul class="verification-flagged">${flagged
         .map(
-          (f) =>
-            `<li><span class="verification-flagged-label">${escapeHtml(f.label)}</span>` +
-            (f.reason ? `<span class="verification-flagged-reason"> — ${escapeHtml(f.reason)}</span>` : "") +
-            "</li>"
+          (f) => {
+            const isNote = f.severity === "note";
+            const icon = isNote
+              ? '<i class="bi bi-info-circle text-muted me-1" title="Informational — does not affect the verdict"></i>'
+              : "";
+            return `<li class="${isNote ? "verification-flagged-note" : ""}">${icon}` +
+              `<span class="verification-flagged-label">${escapeHtml(f.label)}</span>` +
+              (f.reason ? `<span class="verification-flagged-reason"> — ${escapeHtml(f.reason)}</span>` : "") +
+              "</li>";
+          }
         )
         .join("")}${hasMore ? `<li class="text-muted">…and ${(s.flagged_total - flagged.length)} more</li>` : ""}</ul>`
     : "";

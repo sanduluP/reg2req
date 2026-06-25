@@ -219,34 +219,49 @@ def _s2_correctness(
     allowed_reltypes: frozenset[str],
     threshold: float,
 ) -> dict[str, Any]:
+    # Genuine correctness problems (count against the verdict): malformed nodes
+    # and edges with empty/placeholder endpoints.
     flagged: list[dict[str, Any]] = []
     for node_id in node_issue_ids:
-        flagged.append({"label": f"node {node_id}", "reason": "node has an empty/missing name"})
+        flagged.append({"label": f"node {node_id}", "reason": "node has an empty/missing name", "severity": "error"})
+
+    # Off-vocabulary predicates are a SOFT note, not a correctness failure: the
+    # reviewer explicitly accepted them (e.g. via the relaxed/free-text edge
+    # mode), so they are valid — just outside the standard predicate list.
+    notes: list[dict[str, Any]] = []
 
     bad_edges = 0
     for edge in edges:
         src, rel, tgt = edge.get("src"), edge.get("rel"), edge.get("tgt")
-        reasons = []
         if _is_placeholder(src) or _is_placeholder(tgt):
-            reasons.append("empty/placeholder endpoint")
-        if str(rel) not in allowed_reltypes:
-            reasons.append(f"predicate '{_RELTYPE_TO_PREDICATE.get(str(rel), rel)}' not in declared vocabulary")
-        if reasons:
             bad_edges += 1
-            flagged.append({"label": _triple_label(src, rel, tgt), "reason": "; ".join(reasons)})
+            flagged.append({"label": _triple_label(src, rel, tgt), "reason": "empty/placeholder endpoint", "severity": "error"})
+        if str(rel) not in allowed_reltypes:
+            notes.append({
+                "label": _triple_label(src, rel, tgt),
+                "reason": f"non-standard predicate '{_RELTYPE_TO_PREDICATE.get(str(rel), rel)}' "
+                          f"(accepted in review; not in the standard vocabulary)",
+                "severity": "note",
+            })
 
     total_units = len(edges) + len(node_issue_ids)
     bad_units = bad_edges + len(node_issue_ids)
     score = 1.0 if total_units == 0 else (total_units - bad_units) / total_units
-    return _result(
+
+    if bad_units == 0:
+        summary = f"all {len(edges)} triples well-typed"
+        if notes:
+            summary += f" ({len(notes)} non-standard predicate{'s' if len(notes) != 1 else ''} noted)"
+    else:
+        summary = f"{bad_units} issue(s) across nodes/edges"
+
+    result = _result(
         "S2", passed=score >= threshold, score=score, threshold=threshold,
-        summary=(
-            f"all {len(edges)} triples well-typed"
-            if bad_units == 0
-            else f"{bad_units} issue(s) across nodes/edges"
-        ),
-        flagged=flagged,
+        summary=summary,
+        flagged=flagged + notes,  # notes shown but did NOT affect score/passed
     )
+    result["notes_total"] = len(notes)
+    return result
 
 
 def _s3_consistency(edges: list[dict[str, Any]], threshold: float) -> dict[str, Any]:
