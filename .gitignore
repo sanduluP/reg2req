@@ -28,6 +28,8 @@ logs/
 Log/user_updates.csv
 Log/data.csv
 credentials/
+/install_log.txt
+/server_log.txt
 
 
 # 🖌️ UI python artifacts

@@ -22,6 +22,14 @@ let allNoveltyResults = [];
 let tripletExtractionInFlight = false;
 let tripletExtractionGeneration = 0;
 
+// Human review of quality sentences (before extraction):
+//  - deselectedReviewIds: rows the reviewer unchecked (kept visible, not sent)
+//  - deletedReviewIds:    rows the reviewer deleted (hidden + not sent)
+// A quality is sent to extraction only if it survives the relevance threshold,
+// is not deleted, and is not deselected.
+const deselectedReviewIds = new Set();
+const deletedReviewIds = new Set();
+
 // Live relevance-threshold filtering. Qualities are decomposed once, from the
 // chunks that passed the run-time threshold. Dragging the relevance slider can
 // accurately FILTER DOWN (drop qualities whose source chunk now scores below the
@@ -118,6 +126,34 @@ function getIncludedResults() {
   return allNoveltyResults.filter(r => isResultIncluded(r, currentThreshold));
 }
 
+/** Threshold-included qualities the reviewer has NOT deleted (what we display). */
+function getVisibleResults() {
+  return getIncludedResults().filter(r => !deletedReviewIds.has(stableReviewId(r)));
+}
+
+/** Is this quality currently selected to be sent to extraction / the KG? */
+function isReviewSelected(result) {
+  const id = stableReviewId(result);
+  return !deletedReviewIds.has(id) && !deselectedReviewIds.has(id);
+}
+
+/** Visible + selected qualities — the exact set that feeds triplet extraction. */
+function getSelectedResults() {
+  return getVisibleResults().filter(isReviewSelected);
+}
+
+/**
+ * Recompute the pending extraction set from the current selection and refresh
+ * the "Extract triplets" button + summary. Call after any select/delete change.
+ */
+function refreshReviewSelection() {
+  if (!tripletExtractionInFlight) {
+    pendingTripletItems = toTripletExtractionItems(getSelectedResults());
+    syncExtractTripletsButton();
+  }
+  updateQualitySummary();
+}
+
 /**
  * React to the relevance slider: re-filter qualities, re-render the decision
  * tables, refresh the pending triplet set, and update the summary. Pure
@@ -129,19 +165,15 @@ export function applyRelevanceThresholdToQualities(threshold) {
   currentThreshold = Number.isFinite(t) ? t : null;
   if (!allNoveltyResults.length) return;
 
-  const included = getIncludedResults();
-  grouped = groupByDecision(included);
+  grouped = groupByDecision(getVisibleResults());
   renderDecision("EXISTING", 1);
   renderDecision("PARTIALLY_NEW", 1);
   renderDecision("NEW", 1);
+  updateDecisionTabCounts();
 
-  // The included set is what "Extract triplets" will process — this is how the
-  // threshold efficiently decides which chunks feed quality/triplet extraction.
-  if (!tripletExtractionInFlight) {
-    pendingTripletItems = toTripletExtractionItems(included);
-    syncExtractTripletsButton();
-  }
-  updateQualitySummary();
+  // Only selected (checked, not-deleted) qualities are what "Extract triplets"
+  // will process — the threshold pre-filters; the reviewer's checkboxes decide.
+  refreshReviewSelection();
 }
 
 /** Update the "X of Y qualities included" summary + below-run-threshold hint. */
@@ -157,12 +189,17 @@ function updateQualitySummary() {
   }
 
   const included = getIncludedResults().length;
+  const selected = getSelectedResults().length;
+  const deleted = deletedReviewIds.size;
   const belowFloor = extractedFloor != null && currentThreshold < extractedFloor - 1e-9;
 
   const parts = [
-    `<i class="bi bi-funnel me-1"></i><span class="fw-semibold">${included}</span> of ${total} qualities included `,
-    `<span class="text-muted">(relevance ≥ ${currentThreshold.toFixed(2)})</span>`,
+    `<i class="bi bi-check2-square me-1"></i><span class="fw-semibold">${selected}</span> selected `,
+    `<span class="text-muted">of ${included} included · ${total} total (relevance ≥ ${currentThreshold.toFixed(2)})</span>`,
   ];
+  if (deleted > 0) {
+    parts.push(` · <span class="text-danger">${deleted} deleted</span>`);
+  }
 
   if (extendInFlight) {
     parts.push(
@@ -197,20 +234,31 @@ function renderTable({ container, items, decisionKey, page }) {
   const tableWrap = document.createElement("div");
   tableWrap.className = "table-responsive";
 
+  // Selection summary for THIS decision group (across all pages).
+  const groupSelectedCount = items.filter(isReviewSelected).length;
+  const allSelected = items.length > 0 && groupSelectedCount === items.length;
+
   const table = document.createElement("table");
   table.className = "table table-hover align-middle mb-2";
 
   table.innerHTML = `
     <thead>
       <tr>
+        <th style="width: 2.5rem;" class="text-center">
+          <input type="checkbox" class="form-check-input review-select-all"
+            ${allSelected ? "checked" : ""}
+            title="Select / deselect all in this tab"
+            aria-label="Select all qualities in this tab">
+        </th>
         <th>Quality</th>
-        <th style="width: 130px;">
+        <th style="width: 110px;">
           Similarity
           <i
             class="bi bi-info-circle ms-1 text-muted"
             data-bs-toggle="tooltip"
             data-bs-title="Cosine similarity between this quality sentence and the closest existing relation sentence in the retrieved KG subgraph. Higher = closer match."></i>
         </th>
+        <th style="width: 3rem;" class="text-center">Del</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -221,11 +269,17 @@ function renderTable({ container, items, decisionKey, page }) {
   slice.forEach(r => {
     const sourceTitle = sourcePopoverTitle(r);
     const sourceContent = sourcePopoverContent(r);
+    const selected = isReviewSelected(r);
 
     const tr = document.createElement("tr");
+    if (!selected) tr.classList.add("review-row-deselected");
     tr.innerHTML = `
+      <td class="text-center">
+        <input type="checkbox" class="form-check-input review-select"
+          ${selected ? "checked" : ""} aria-label="Select this quality">
+      </td>
       <td class="quality-cell">
-        <div class="fw-semibold fs-6 d-flex align-items-start gap-2">
+        <div class="quality-text d-flex align-items-start gap-2">
           <button type="button"
             class="btn btn-sm btn-link p-0 text-muted"
             data-bs-toggle="popover"
@@ -245,10 +299,49 @@ function renderTable({ container, items, decisionKey, page }) {
       <td>
         <span class="badge text-bg-secondary">${formatSimilarity(r.max_score)}</span>
       </td>
+      <td class="text-center">
+        <button type="button" class="btn btn-sm btn-link p-0 text-danger review-delete"
+          title="Delete this quality (won't be sent to the KG)" aria-label="Delete this quality">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
     `;
+
+    const cb = tr.querySelector(".review-select");
+    cb.addEventListener("change", () => {
+      const id = stableReviewId(r);
+      if (cb.checked) deselectedReviewIds.delete(id);
+      else deselectedReviewIds.add(id);
+      tr.classList.toggle("review-row-deselected", !cb.checked);
+      // keep the tab's select-all box in sync
+      const head = table.querySelector(".review-select-all");
+      if (head) head.checked = items.every(isReviewSelected);
+      refreshReviewSelection();
+    });
+
+    tr.querySelector(".review-delete").addEventListener("click", () => {
+      deletedReviewIds.add(stableReviewId(r));
+      grouped = groupByDecision(getVisibleResults());
+      renderDecision(decisionKey, cur);
+      refreshReviewSelection();
+    });
 
     tbody.appendChild(tr);
   });
+
+  // Header select-all toggles every row in this decision group (all pages).
+  const selectAll = table.querySelector(".review-select-all");
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      items.forEach(r => {
+        const id = stableReviewId(r);
+        if (selectAll.checked) deselectedReviewIds.delete(id);
+        else deselectedReviewIds.add(id);
+      });
+      renderDecision(decisionKey, cur);
+      refreshReviewSelection();
+    });
+  }
 
   tableWrap.appendChild(table);
   container.appendChild(tableWrap);
@@ -294,6 +387,34 @@ function renderDecision(decisionKey, page = 1) {
   renderTable({ container: pane, items: grouped[decisionKey], decisionKey, page });
 }
 
+// The three review tabs, in display order.
+const DECISION_TABS = [
+  { key: "EXISTING", id: "oversight-existing-tab", label: "Existing Knowledge" },
+  { key: "PARTIALLY_NEW", id: "oversight-partially_new-tab", label: "Partial Match" },
+  { key: "NEW", id: "oversight-new-tab", label: "New Knowledge" },
+];
+
+/** Show "<label> (n)" on each tab so the reviewer sees where the lines are. */
+function updateDecisionTabCounts() {
+  if (!grouped) return;
+  for (const t of DECISION_TABS) {
+    const btn = document.getElementById(t.id);
+    if (!btn) continue;
+    const n = (grouped[t.key] || []).length;
+    btn.innerHTML = `${t.label} <span class="badge rounded-pill ${n ? "text-bg-secondary" : "text-bg-light text-muted"} ms-1">${n}</span>`;
+  }
+}
+
+/** Switch to the first tab that actually has rows (so the reviewer never lands
+ *  on an empty tab and thinks there are no lines / no checkboxes). */
+function activateFirstPopulatedDecisionTab() {
+  if (!grouped || !window.bootstrap?.Tab) return;
+  const target = DECISION_TABS.find(t => (grouped[t.key] || []).length > 0);
+  if (!target) return;
+  const btn = document.getElementById(target.id);
+  if (btn) window.bootstrap.Tab.getOrCreateInstance(btn).show();
+}
+
 function getTripletStatusEl() {
   return document.getElementById("oversight-triplet-status");
 }
@@ -324,6 +445,9 @@ export function renderHumanOversightFromPipelineResult(pipelineResult, runContex
   const novelty = pipelineResult?.NoveltyLLM;
   const results = Array.isArray(novelty?.results) ? novelty.results : [];
   allNoveltyResults = normalizeReviewResults(results);
+  // Fresh review session: every quality starts selected and none deleted.
+  deselectedReviewIds.clear();
+  deletedReviewIds.clear();
 
   // Threshold the qualities were extracted at; the slider starts here so the
   // initial view shows every extracted quality.
@@ -339,11 +463,13 @@ export function renderHumanOversightFromPipelineResult(pipelineResult, runContex
   pendingExtendThreshold = null;
   ++extendGeneration;
 
-  grouped = groupByDecision(getIncludedResults());
+  grouped = groupByDecision(getVisibleResults());
 
   renderDecision("EXISTING", 1);
   renderDecision("PARTIALLY_NEW", 1);
   renderDecision("NEW", 1);
+  updateDecisionTabCounts();
+  activateFirstPopulatedDecisionTab();
 
   switchToTopLevelTab({ tab: TopLevelTabs.OVERSIGHT });
   setOversightStep(OversightSteps.CANDIDATE_SENTENCES);
@@ -351,7 +477,7 @@ export function renderHumanOversightFromPipelineResult(pipelineResult, runContex
   syncGoToTripletsButton();
   wireGoToTripletsButton();
 
-  const selectedItems = toTripletExtractionItems(getIncludedResults());
+  const selectedItems = toTripletExtractionItems(getSelectedResults());
   ++tripletExtractionGeneration;
   pendingTripletItems = selectedItems;
   updateQualitySummary();
@@ -656,6 +782,8 @@ function syncExtractTripletsButton() {
   const ready = pendingTripletItems.length > 0 && !tripletExtractionInFlight;
   btn.classList.toggle("d-none", !ready);
   btn.disabled = !ready;
+  const countEl = document.getElementById("extract-triplets-count");
+  if (countEl) countEl.textContent = ready ? ` (${pendingTripletItems.length} selected)` : "";
 }
 
 export function wireExtractTripletsButton() {
@@ -687,6 +815,8 @@ export function wireExtractTripletsButton() {
 export function resetHumanOversightUI() {
   allNoveltyResults = [];
   grouped = null;
+  deselectedReviewIds.clear();
+  deletedReviewIds.clear();
   runThreshold = null;
   currentThreshold = null;
   runJobId = null;

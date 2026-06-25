@@ -115,6 +115,30 @@ function activeSources() {
     return arr.length === 0 ? [] : arr;
 }
 
+/** How many documents are actually persisted in the graph (analysis works on these). */
+function graphSourceCount() {
+    return state.allSources.filter(s => s.type === "graph").length;
+}
+
+/** True if the current session has an uploaded doc not yet submitted to the KG. */
+function hasUnsubmittedSessionDoc() {
+    return state.allSources.some(s => s.type === "session");
+}
+
+/**
+ * Cross-document analysis (alignment / conflicts / overlap) runs over documents
+ * stored in Neo4j. If there are fewer than two, tell the reviewer exactly what
+ * to do — usually "submit your uploaded document to the KG first".
+ */
+function notEnoughGraphDocsHint(kind) {
+    if (graphSourceCount() >= 2) return "";
+    if (hasUnsubmittedSessionDoc()) {
+        return `Your uploaded document isn't in the knowledge graph yet, so there's nothing to ${kind} it against. ` +
+            `Go to Review & extract → Submit to KG, then scan here.`;
+    }
+    return `Need at least two documents in the graph to ${kind}. Initialize the baseline graph and/or submit a document first.`;
+}
+
 /* ======================== Source selector ======================== */
 
 async function loadSources() {
@@ -402,7 +426,8 @@ async function scanAlignment() {
         });
         state.alignment = Array.isArray(result?.candidates) ? result.candidates : [];
         renderAlignment();
-        setStatus("compare-alignment-status", `${state.alignment.length} candidate pair(s).`);
+        const hint = state.alignment.length === 0 ? notEnoughGraphDocsHint("align") : "";
+        setStatus("compare-alignment-status", hint || `${state.alignment.length} candidate pair(s).`);
     } catch (e) {
         setStatus("compare-alignment-status", `Failed: ${e.message || e}`);
     } finally {
@@ -481,7 +506,8 @@ async function scanConflicts() {
         state.conflicts = Array.isArray(result?.conflicts) ? result.conflicts : [];
         renderConflicts();
         const filterNote = sources ? ` (filtered to ${sources.length} source(s))` : "";
-        setStatus("compare-conflicts-status", `${state.conflicts.length} candidate(s)${filterNote}.`);
+        const hint = state.conflicts.length === 0 ? notEnoughGraphDocsHint("compare") : "";
+        setStatus("compare-conflicts-status", hint || `${state.conflicts.length} candidate(s)${filterNote}.`);
         await refreshRecordedConflicts();
     } catch (e) {
         setStatus("compare-conflicts-status", `Failed: ${e.message || e}`);

@@ -30,6 +30,8 @@ import { fireConfetti } from "./confetti.js";
 import { resetPipelineSession } from "./ui_reset.js";
 import { exportTripletReviewAsXlsx } from "./utils/export_utils.js";
 import { formatPredicateLabel } from "./utils/predicate_format.js";
+import { runVerification } from "./verification_controller.js";
+import { fetchJson } from "./api_client.js";
 
 
 /** Internal in-memory store of editable rows. */
@@ -295,6 +297,131 @@ function wireTripletsToolbar() {
             exportTripletsReviewAsXlsx();
         });
     }
+
+    // Pre-merge "Check against KB" (sentence-level comparison)
+    const checkBtn = document.getElementById("triplets-check-kb");
+    if (checkBtn && !checkBtn.dataset.wired) {
+        checkBtn.dataset.wired = "1";
+        checkBtn.addEventListener("click", () => { void checkAgainstKb(); });
+    }
+}
+
+/** Triples currently included (checked, not deleted), shaped for the preview API. */
+function includedTriplesForPreview() {
+    return state.rows
+        .filter(r => r.include && !r.deleted)
+        .map(r => ({
+            subject: String(r.subject ?? "").trim(),
+            predicate: String(r.predicate ?? "").trim(),
+            object: String(r.object ?? "").trim(),
+            sentence: String(r.sentence ?? "").trim(),
+        }))
+        .filter(t => t.subject && t.predicate && t.object);
+}
+
+const PREVIEW_GROUPS = [
+    { key: "CONFLICT", label: "Conflicts", cls: "kb-cat-conflict", icon: "bi-exclamation-octagon-fill",
+      blurb: "This document contradicts the KB." },
+    { key: "TENSION", label: "Tensions", cls: "kb-cat-tension", icon: "bi-exclamation-triangle-fill",
+      blurb: "Same statement, different obligation strength." },
+    { key: "RELATED", label: "Related", cls: "kb-cat-related", icon: "bi-link-45deg",
+      blurb: "Same concepts, related differently in the KB." },
+    { key: "NEW", label: "New", cls: "kb-cat-new", icon: "bi-stars",
+      blurb: "Not in the KB yet — would be added." },
+    { key: "EXISTING", label: "Already in KB", cls: "kb-cat-existing", icon: "bi-check-circle",
+      blurb: "Duplicate of knowledge already in the graph." },
+];
+
+/** Compare the included triplets against the KB and render the result panel. */
+async function checkAgainstKb() {
+    const wrap = document.getElementById("triplets-preview-wrap");
+    if (!wrap) return;
+
+    const triples = includedTriplesForPreview();
+    if (!triples.length) {
+        showToast({ type: "warning", title: "Nothing to check",
+            message: "Include at least one triplet first." });
+        return;
+    }
+
+    wrap.classList.remove("d-none");
+    wrap.innerHTML =
+        '<div class="text-muted small d-flex align-items-center gap-2 p-2">' +
+        '<span class="spinner-border spinner-border-sm"></span>' +
+        `Comparing ${triples.length} triplet(s) against the knowledge graph…</div>`;
+
+    try {
+        const report = await fetchJson("/api/comparison/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ triples, source: getOversightSource() || "" }),
+        });
+        renderPreviewReport(report);
+    } catch (e) {
+        wrap.innerHTML = `<div class="alert alert-danger py-2 small mb-0">Check failed: ${escapeHtml(e.message || String(e))}</div>`;
+    }
+}
+
+function renderPreviewReport(report) {
+    const wrap = document.getElementById("triplets-preview-wrap");
+    if (!wrap) return;
+
+    const items = Array.isArray(report?.items) ? report.items : [];
+    const s = report?.summary || {};
+
+    if (!items.length) {
+        wrap.innerHTML = `<div class="text-muted small p-2">No triplets to compare.</div>`;
+        return;
+    }
+
+    const chip = (g) => {
+        const n = s[g.key.toLowerCase()] || 0;
+        return `<span class="kb-chip ${g.cls}" title="${escapeHtml(g.blurb)}">
+                  <i class="bi ${g.icon}"></i> ${n} ${escapeHtml(g.label)}</span>`;
+    };
+
+    const groupsHtml = PREVIEW_GROUPS.map(g => {
+        const rows = items.filter(it => it.category === g.key);
+        if (!rows.length) return "";
+        const body = rows.map(it => {
+            const kb = (it.kb_matches || []).map(m => `
+              <div class="kb-side kb-side-graph">
+                <span class="kb-side-tag">KB${m.docs && m.docs.length ? " · " + escapeHtml(m.docs.join(", ")) : ""}</span>
+                <span class="kb-pred">${escapeHtml(m.predicate)}${m.modality ? " · " + escapeHtml(m.modality) : ""}</span>
+                <div class="kb-sentence">${escapeHtml(m.sentence || "—")}</div>
+              </div>`).join("");
+            return `
+              <div class="kb-item ${g.cls}">
+                <div class="kb-triple">
+                  <code>${escapeHtml(it.subject)}</code>
+                  <span class="kb-pred">${escapeHtml(it.predicate)}${it.modality ? " · " + escapeHtml(it.modality) : ""}</span>
+                  <code>${escapeHtml(it.object)}</code>
+                </div>
+                <div class="kb-reason">${escapeHtml(it.reason || "")}</div>
+                <div class="kb-side kb-side-doc">
+                  <span class="kb-side-tag">Your doc</span>
+                  <div class="kb-sentence">${escapeHtml(it.sentence || "—")}</div>
+                </div>
+                ${kb}
+              </div>`;
+        }).join("");
+        return `<div class="kb-group">
+                  <div class="kb-group-head ${g.cls}"><i class="bi ${g.icon}"></i> ${escapeHtml(g.label)} (${rows.length})</div>
+                  ${body}
+                </div>`;
+    }).join("");
+
+    wrap.innerHTML = `
+      <div class="kb-preview-head d-flex align-items-center flex-wrap gap-2 mb-2">
+        <span class="fw-semibold small"><i class="bi bi-shuffle me-1"></i>Compared ${s.total || items.length} triplet(s) against the KB (before merge):</span>
+        ${PREVIEW_GROUPS.map(chip).join("")}
+        <button type="button" class="btn btn-sm btn-link p-0 ms-auto" id="kb-preview-close">Hide</button>
+      </div>
+      ${groupsHtml}
+    `;
+    document.getElementById("kb-preview-close")?.addEventListener("click", () => {
+        wrap.classList.add("d-none");
+    });
 }
 
 function formatScore(score) {
@@ -563,7 +690,13 @@ function renderTripletsTable() {
     table.innerHTML = `
     <thead>
       <tr>
-        <th style="width: 82px;">Include</th>
+        <th style="width: 92px;">
+          <div class="d-flex align-items-center gap-1">
+            <input class="form-check-input triplet-include-all" type="checkbox"
+                   title="Include / exclude all shown triplets" aria-label="Include all" />
+            <span>Include</span>
+          </div>
+        </th>
         <th style="width: 44px;"></th>
         <th>Subject</th>
         <th>Predicate</th>
@@ -660,7 +793,28 @@ function renderTripletsTable() {
         tbody.appendChild(tr);
     });
 
-    wrap.appendChild(table);
+    // Header "include all" checkbox: toggles every shown, non-deleted row.
+    const selectAll = table.querySelector(".triplet-include-all");
+    if (selectAll) {
+        const toggleable = rows.filter(r => !r.deleted);
+        const includedCount = toggleable.filter(r => r.include).length;
+        selectAll.checked = toggleable.length > 0 && includedCount === toggleable.length;
+        selectAll.indeterminate = includedCount > 0 && includedCount < toggleable.length;
+        selectAll.disabled = toggleable.length === 0;
+        selectAll.addEventListener("change", () => {
+            const visible = getVisibleRows();
+            visible.forEach(r => { if (!r.deleted) r.include = selectAll.checked; });
+            renderTripletsTable();
+            updateTripletsCounters();
+        });
+    }
+
+    // Wrap in a horizontally-scrollable container so the Actions/delete column
+    // is never clipped when the settings sidebar narrows the main area.
+    const responsive = document.createElement("div");
+    responsive.className = "table-responsive";
+    responsive.appendChild(table);
+    wrap.appendChild(responsive);
 
     initBootstrapPopovers(wrap);
 }
@@ -906,6 +1060,18 @@ async function submitTripletsToKnowledgeGraph() {
                 });
 
                 fireConfetti();
+
+                // Phase B: verify the freshly-built graph. Non-blocking — the
+                // graph is already upserted and shown; the verification panel
+                // renders its own PASS/FAIL verdict on the graph view and any
+                // error stays inside the panel.
+                const verifySentences = payload.extractions
+                    .map(e => e.sentence)
+                    .filter(Boolean);
+                runVerification({
+                    sentences: verifySentences,
+                    allowedPredicates: state.allowedPredicates || [],
+                });
 
                 // resetPipelineSession();
 

@@ -58,3 +58,16 @@ export async function upsertTripletsToKnowledgeGraphJob({ extractions, source })
     body: JSON.stringify({ extractions, source }),
   });
 }
+
+/**
+ * Start a Phase B verification job over the current knowledge graph.
+ * Returns { job_id } to poll via getJobStatus(); the result carries
+ * { verification: {verdict, passed_count, total, strategies:[...]} }.
+ */
+export async function startVerificationJob({ sentences, allowed_predicates, thresholds } = {}) {
+  return fetchJson("/api/verification/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sentences, allowed_predicates, thresholds }),
+  });
+}

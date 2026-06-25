@@ -12,6 +12,7 @@ from flask import Flask, render_template
 from .comparison_routes import comparison_bp
 from .graph_routes import graph_bp
 from .pipeline_routes import pipeline_bp
+from .verification_routes import verification_bp
 
 def register_blueprints(app: Flask) -> None:
     """
@@ -33,3 +34,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(graph_bp, url_prefix="/api/graph")
     app.register_blueprint(pipeline_bp, url_prefix="/api/pipeline")
     app.register_blueprint(comparison_bp, url_prefix="/api/comparison")
+    app.register_blueprint(verification_bp, url_prefix="/api/verification")

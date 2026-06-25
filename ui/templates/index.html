@@ -185,6 +185,12 @@
 
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li>
+                                        <button id="verify-graph-menu-btn" class="dropdown-item" type="button">
+                                            <i class="bi bi-shield-check me-2"></i> Verify graph (5-strategy)
+                                        </button>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
                                         <button id="export-subgraph-json" class="dropdown-item" type="button">
                                             <i class="bi bi-filetype-json me-2"></i> Export subgraph sentences (JSON)
                                         </button>
@@ -209,6 +215,22 @@
                                     🪾 This keyword currently has no connected concepts in the graph.
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Phase B: 5-strategy verification panel (shown after the graph is built) -->
+                        <div id="verification-panel" class="verification-panel d-none">
+                            <div class="verification-header">
+                                <i class="bi bi-shield-check text-primary"></i>
+                                <span class="verification-title">Verification</span>
+                                <span id="verification-verdict-badge" class="verification-badge verification-badge-pending">…</span>
+                                <button id="verification-rerun-btn" class="btn btn-sm btn-link p-0 ms-auto" type="button" title="Re-run verification">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                                <button id="verification-close-btn" class="btn btn-sm btn-link p-0 text-secondary" type="button" title="Hide">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                            <div id="verification-body" class="verification-body"></div>
                         </div>
 
                     </div>
@@ -318,6 +340,17 @@
                                     <div class="oversight-split-container">
                                         <div class="oversight-top d-flex flex-column" style="min-height:0;">
 
+                                            <!-- Human verification banner -->
+                                            <div id="oversight-verify-banner" class="alert alert-primary py-2 px-3 mb-2 d-flex align-items-center gap-2" role="alert" style="font-size:0.82rem;">
+                                                <i class="bi bi-person-check-fill fs-6"></i>
+                                                <div>
+                                                    <strong>Human verification.</strong>
+                                                    Tick only the quality lines you approve (use the checkboxes / select-all), or
+                                                    <i class="bi bi-trash"></i> delete the ones you don't want.
+                                                    <span class="fw-semibold">Only selected lines are sent to extraction and the KB.</span>
+                                                </div>
+                                            </div>
+
                                             <!-- Inner tabs -->
                                             <ul class="nav nav-tabs mb-2" id="oversight-inner-tabs" role="tablist">
                                                 <li class="nav-item" role="presentation">
@@ -358,8 +391,8 @@
                                                 <div class="d-flex gap-2">
                                                     <button id="oversight-extract-triplets"
                                                         class="btn btn-success btn-sm d-none" type="button"
-                                                        title="Run triplet extraction using the extraction profile above">
-                                                        <i class="bi bi-magic me-1"></i>Extract triplets
+                                                        title="Run triplet extraction on the selected quality lines only">
+                                                        <i class="bi bi-magic me-1"></i>Extract triplets<span id="extract-triplets-count"></span>
                                                     </button>
                                                     <button id="oversight-go-triplets"
                                                         class="btn btn-outline-secondary btn-sm d-none" type="button">
@@ -395,6 +428,11 @@
                                                     type="button">
                                                     <i class="bi bi-arrow-left me-1"></i>Back to qualities
                                                 </button>
+                                                <button id="triplets-check-kb" class="btn btn-outline-primary btn-sm"
+                                                    type="button"
+                                                    title="Compare the included triplets against the current KB (before merging) to see conflicts, duplicates and what's new">
+                                                    <i class="bi bi-shuffle me-1"></i>Check against KB
+                                                </button>
                                                 <button id="triplets-submit" class="btn btn-success btn-sm"
                                                     type="button" disabled>
                                                     <i class="bi bi-database-up me-1"></i>Submit to KG
@@ -404,6 +442,9 @@
                                                     <i class="bi bi-download me-1"></i> Export
                                                 </button>
                                             </div>
+
+                                            <!-- Pre-merge comparison results (sentence-level: doc vs KB) -->
+                                            <div id="triplets-preview-wrap" class="kb-preview d-none mb-2"></div>
 
                                             <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                                                 <div class="text-muted small">

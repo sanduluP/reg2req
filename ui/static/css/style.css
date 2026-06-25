@@ -637,3 +637,275 @@ body {
   white-space: pre-wrap;
   overflow: auto;
 }
+
+/* ── Quality review: per-line selection / delete ─────────────────────── */
+.qualities-container .review-row-deselected {
+  opacity: 0.5;
+}
+.qualities-container .review-row-deselected .quality-cell span.flex-grow-1 {
+  text-decoration: line-through;
+}
+.qualities-container .quality-cell {
+  word-break: break-word;
+}
+/* Keep the quality column readable but let the table scroll horizontally on
+   very small screens (the wrapper is .table-responsive). The font-size matches
+   the compact chunk-relevance table so quality lines aren't oversized. */
+.qualities-container table {
+  min-width: 32rem;
+  font-size: 0.82rem;
+}
+.qualities-container .quality-text {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Extracted-triplets table: keep columns from crushing; the .table-responsive
+   wrapper then scrolls horizontally so the Actions/delete column stays reachable
+   even with the settings sidebar open. */
+#triplets-table-wrap table {
+  min-width: 720px;
+}
+
+/* ── Pre-merge "Check against KB" panel (sentence-level doc vs KB) ─────── */
+.kb-preview {
+  border: 1px solid #dbe3ee;
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 0.6rem 0.7rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.kb-preview-head { font-size: 0.82rem; }
+.kb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.kb-cat-conflict { color: #991b1b; }
+.kb-cat-tension  { color: #92400e; }
+.kb-cat-related  { color: #3730a3; }
+.kb-cat-new      { color: #166534; }
+.kb-cat-existing { color: #475569; }
+.kb-chip.kb-cat-conflict { background: #fee2e2; }
+.kb-chip.kb-cat-tension  { background: #fef3c7; }
+.kb-chip.kb-cat-related  { background: #e0e7ff; }
+.kb-chip.kb-cat-new      { background: #dcfce7; }
+.kb-chip.kb-cat-existing { background: #e2e8f0; }
+
+.kb-group { margin-top: 0.5rem; }
+.kb-group-head {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.2rem 0.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.kb-item {
+  border-left: 3px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 0 0.375rem 0.375rem 0;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.4rem;
+}
+.kb-item.kb-cat-conflict { border-left-color: #dc2626; background: #fef2f2; }
+.kb-item.kb-cat-tension  { border-left-color: #d97706; background: #fffbeb; }
+.kb-item.kb-cat-related  { border-left-color: #6366f1; background: #f5f5ff; }
+.kb-item.kb-cat-new      { border-left-color: #16a34a; background: #f3fdf6; }
+.kb-item.kb-cat-existing { border-left-color: #94a3b8; background: #f8fafc; }
+
+.kb-triple { font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.kb-triple code { background: #eef2f7; color: #0f172a; padding: 0.05rem 0.3rem; border-radius: 0.25rem; }
+.kb-pred { font-size: 0.7rem; font-weight: 600; color: #475569; }
+.kb-reason { font-size: 0.72rem; color: #64748b; margin: 0.15rem 0 0.3rem; }
+.kb-side { font-size: 0.74rem; padding: 0.2rem 0 0.2rem 0.6rem; border-left: 2px solid #e2e8f0; margin-top: 0.2rem; }
+.kb-side-doc { border-left-color: #93c5fd; }
+.kb-side-graph { border-left-color: #cbd5e1; }
+.kb-side-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; margin-right: 0.4rem; }
+.kb-sentence { display: inline; color: #1e293b; }
+
+/* On narrow screens, let the oversight action bar and inner tabs wrap nicely. */
+@media (max-width: 768px) {
+  #oversight-inner-tabs,
+  #compare-inner-tabs {
+    flex-wrap: wrap;
+  }
+  .oversight-main {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+}
+
+/* ── Phase B verification panel (overlay on the graph view) ───────────── */
+.verification-panel {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 20;
+  width: min(380px, calc(100% - 24px));
+  max-height: min(62%, 520px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.verification-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid #eef2f7;
+  background: #f8fafc;
+  font-size: 0.8rem;
+}
+
+.verification-title {
+  font-weight: 600;
+  color: #334155;
+}
+
+.verification-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.verification-badge-pass { background: #dcfce7; color: #166534; }
+.verification-badge-fail { background: #fee2e2; color: #991b1b; }
+.verification-badge-pending { background: #e2e8f0; color: #475569; }
+
+.verification-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.6rem;
+}
+
+.verification-row {
+  border-top: 1px solid #f1f5f9;
+  padding: 0.15rem 0;
+}
+.verification-row:first-child { border-top: none; }
+.verification-row-fail .verification-row-summary { color: #b91c1c; }
+
+.verification-row-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  padding: 0.3rem 0.1rem;
+  text-align: left;
+  font-size: 0.74rem;
+  color: #334155;
+}
+.verification-row-head.verification-row-static { cursor: default; }
+.verification-row-head:not(.verification-row-static):hover { background: #f8fafc; }
+
+.verification-row-id {
+  font-weight: 700;
+  color: #64748b;
+  flex: 0 0 auto;
+}
+.verification-row-name {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.verification-row-summary {
+  color: #64748b;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.verification-chevron {
+  font-size: 0.6rem;
+  color: #94a3b8;
+  flex: 0 0 auto;
+  transition: transform 0.2s;
+}
+.verification-row-head[aria-expanded="true"] .verification-chevron { transform: rotate(180deg); }
+
+.verification-flagged {
+  list-style: none;
+  margin: 0.1rem 0 0.4rem 1.4rem;
+  padding: 0;
+  font-size: 0.7rem;
+}
+.verification-flagged li { padding: 0.1rem 0; }
+.verification-flagged-label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #0f172a; }
+.verification-flagged-reason { color: #94a3b8; }
+
+/* ===================================================================== */
+/* Responsive page-scroll layout                                          */
+/* --------------------------------------------------------------------- */
+/* The app used to lock to the viewport (body overflow:hidden, app-frame  */
+/* height:100dvh) and expect each inner panel to scroll itself — so when  */
+/* a tab's content was taller than its panel it got clipped with NO       */
+/* scrollbar. Here we let the whole DOCUMENT scroll instead. The graph    */
+/* view keeps an explicit height so Cytoscape still has a sized canvas;   */
+/* every other tab grows with its content and the page scrolls.          */
+/* These rules come last so they win over the fixed-viewport rules above. */
+/* ===================================================================== */
+html, body {
+  height: auto;
+  min-height: 100%;
+}
+body {
+  overflow-x: hidden;
+  overflow-y: visible;       /* native document scroll (html is the scroller) */
+}
+.app-frame {
+  height: auto;
+  min-height: 100dvh;        /* fill the screen, but grow with content */
+}
+.visualization-area { min-height: 0; }
+.graph-wrapper { overflow: visible; min-height: 0; }
+#view-tabs-content { height: auto !important; overflow: visible; }
+#view-tabs-content > .tab-pane { height: auto !important; }
+
+/* Graph tab: Cytoscape needs a definite height (can't rely on flex-fill now).
+   Two-id selector so it beats the `#view-tabs-content > .tab-pane` rule above. */
+#view-tabs-content > #graph-view {
+  height: 72vh !important;
+  min-height: 360px;
+}
+
+/* Content tabs flow naturally; the document scroll bar handles overflow. */
+#oversight-view,
+#oversight-view.active { overflow: visible; min-height: 0; }
+#oversight-section { height: auto; overflow: visible; }
+.oversight-layout { overflow: visible; }
+.oversight-settings-sidebar { overflow: visible; }
+.sidebar-body { overflow: visible; }
+.oversight-main { overflow: visible; }
+.oversight-split-container { overflow: visible; }
+#oversight-bottom { height: auto; }
+#compare-view { overflow: visible; }
+
+/* Small screens: stack the settings sidebar above the review content. */
+@media (max-width: 992px) {
+  .oversight-layout { flex-direction: column; }
+  .oversight-settings-sidebar,
+  .oversight-settings-sidebar.sidebar-collapsed {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .oversight-settings-sidebar.sidebar-collapsed .sidebar-body { display: none; }
+}

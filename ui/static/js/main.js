@@ -17,6 +17,7 @@ import { renderChunkScoresDebug } from "./chunk_scores_debug.js"; // DEBUG/TEST 
 import { wireSeedButton } from "./seed_controller.js";
 import { registerSubgraphRenderer } from "./graph_refresh.js";
 import { hideProgressPanel } from "./pipeline_progress_ui.js"
+import { initVerificationPanel } from "./verification_controller.js";
 
 // Optional modules (TODO: Most likely will be deleted)
 // import { wireGraphSearch } from "./graph_free_text_search.js";
@@ -114,6 +115,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 5) One-click seed (populate a fresh Neo4j with curated ground truth)
   // ---------------------------------------------------------------------------
   wireSeedButton({ seedBtnId: "seed-graph-btn", keywordSelectId: "keyword-select" });
+
+  // ---------------------------------------------------------------------------
+  // 6) Phase B verification panel (auto-runs after KG upsert; manual re-run)
+  // ---------------------------------------------------------------------------
+  initVerificationPanel();
 
   // // ---------------------------------------------------------------------------
   // // 4) Optional: graph free-text search (if you keep that UI)

@@ -220,6 +220,65 @@ def get_recorded_conflicts():
     return jsonify({"conflicts": recorded})
 
 
+@comparison_bp.post("/preview")
+def post_preview_against_kb():
+    """
+    Pre-merge check: compare a document's extracted triples against the current
+    knowledge graph WITHOUT writing anything. Sentence-level — each result keeps
+    the source sentence and the matched KB sentence(s).
+
+    Request (JSON)
+    --------------
+    {
+      "triples": [
+        {"subject": "...", "predicate": "...", "object": "...",
+         "sentence": "...", "modality": "MANDATORY"?},
+        ...
+      ],
+      "source": "doc.pdf"   # optional, for labelling
+    }
+
+    Response: { "summary": {...}, "items": [...] }  (see preview module)
+    """
+    from kbdebugger.comparison.preview import preview_triples_against_kb
+    from kbdebugger.graph import get_graph
+
+    payload = request.get_json(silent=True) or {}
+    raw = payload.get("triples")
+    if not isinstance(raw, list) or not raw:
+        return jsonify({"error": "Expected a non-empty 'triples' list."}), 400
+
+    triples = []
+    for t in raw:
+        if not isinstance(t, dict):
+            continue
+        subject = str(t.get("subject", "")).strip()
+        predicate = str(t.get("predicate", "")).strip()
+        obj = str(t.get("object", "")).strip()
+        if subject and predicate and obj:
+            triples.append({
+                "subject": subject,
+                "predicate": predicate,
+                "object": obj,
+                "sentence": str(t.get("sentence", "")).strip(),
+                "modality": str(t.get("modality", "")).strip(),
+            })
+
+    if not triples:
+        return jsonify({"error": "No valid triples (need subject, predicate, object)."}), 400
+
+    source = payload.get("source")
+    try:
+        report = preview_triples_against_kb(
+            get_graph(), triples, source=str(source).strip() if source else None
+        )
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": f"Pre-merge comparison failed: {e}"}), 500
+
+    return jsonify(report)
+
+
 @comparison_bp.get("/ambiguity")
 def get_ambiguity_report():
     from kbdebugger.comparison import ambiguity
