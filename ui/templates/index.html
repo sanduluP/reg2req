@@ -41,7 +41,7 @@
                     </div>
                     <button id="seed-graph-btn" class="btn btn-outline-primary btn-sm w-100" type="button"
                         title="Load curated Trustworthy-AI baseline knowledge into Neo4j">
-                        <i class="bi bi-database-add me-1"></i> Load baseline knowledge
+                        <i class="bi bi-database-add me-1"></i> Load baseline KB
                     </button>
                     <div class="step-hint">Skip to use your existing Neo4j (.env).</div>
                 </div>
@@ -423,29 +423,29 @@
                                         </div><!-- /oversight-top -->
 
                                         <div id="oversight-bottom" class="oversight-bottom d-none">
-                                            <div class="d-flex justify-content-end flex-wrap mb-2 gap-2">
-                                                <button id="triplets-back" class="btn btn-outline-secondary btn-sm"
-                                                    type="button">
-                                                    <i class="bi bi-arrow-left me-1"></i>Back to qualities
+                                            <!-- Action bar -->
+                                            <div class="triplets-actionbar">
+                                                <button id="triplets-back" class="btn btn-sm btn-ghost" type="button">
+                                                    <i class="bi bi-arrow-left me-1"></i>Back
                                                 </button>
-                                                <button id="triplets-check-kb" class="btn btn-outline-primary btn-sm"
-                                                    type="button"
-                                                    title="Compare the included triplets against the current KB (before merging) to see conflicts, duplicates and what's new">
-                                                    <i class="bi bi-shuffle me-1"></i>Check against KB
-                                                </button>
-                                                <button id="triplets-quality-check" class="btn btn-outline-primary btn-sm"
-                                                    type="button"
-                                                    title="AI quality check: flag hallucinated subject/object, near-duplicate entities, and duplicate relations">
-                                                    <i class="bi bi-robot me-1"></i>AI quality check
-                                                </button>
-                                                <button id="triplets-submit" class="btn btn-success btn-sm"
-                                                    type="button" disabled>
-                                                    <i class="bi bi-database-up me-1"></i>Submit to KG
-                                                </button>
-                                                <button id="triplets-export" class="btn btn-outline-primary btn-sm"
-                                                    type="button">
-                                                    <i class="bi bi-download me-1"></i> Export
-                                                </button>
+                                                <div class="triplets-actions ms-auto">
+                                                    <button id="triplets-check-kb" class="btn btn-sm btn-soft-primary"
+                                                        type="button"
+                                                        title="Compare the included triplets against the current KB (before merging) to see conflicts, duplicates and what's new">
+                                                        <i class="bi bi-shuffle me-1"></i>Check against KB
+                                                    </button>
+                                                    <button id="triplets-quality-check" class="btn btn-sm btn-soft-primary"
+                                                        type="button"
+                                                        title="AI quality check: flag hallucinated subject/object, near-duplicate entities, and duplicate relations">
+                                                        <i class="bi bi-robot me-1"></i>AI quality check
+                                                    </button>
+                                                    <button id="triplets-export" class="btn btn-sm btn-ghost" type="button">
+                                                        <i class="bi bi-download me-1"></i>Export
+                                                    </button>
+                                                    <button id="triplets-submit" class="btn btn-sm btn-success" type="button" disabled>
+                                                        <i class="bi bi-database-up me-1"></i>Submit to KG
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             <!-- Pre-merge comparison results (sentence-level: doc vs KB) -->
@@ -454,16 +454,15 @@
                                             <!-- AI quality-check results (faithfulness + dedup) -->
                                             <div id="triplets-quality-wrap" class="kb-preview d-none mb-2"></div>
 
-                                            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-                                                <div class="text-muted small">
-                                                    Included: <span id="triplets-count" class="fw-semibold">0</span>
-                                                    <span class="mx-2">•</span>
-                                                    Excluded: <span id="triplets-excluded-count" class="fw-semibold">0</span>
-                                                    <span class="mx-2">•</span>
-                                                    Deleted: <span id="triplets-deleted-count" class="fw-semibold">0</span>
+                                            <!-- Counts + filters -->
+                                            <div class="triplets-filterbar">
+                                                <div class="triplets-counts">
+                                                    <span class="tcount tcount-inc"><span id="triplets-count">0</span>&nbsp;included</span>
+                                                    <span class="tcount tcount-exc"><span id="triplets-excluded-count">0</span>&nbsp;excluded</span>
+                                                    <span class="tcount tcount-del"><span id="triplets-deleted-count">0</span>&nbsp;deleted</span>
                                                 </div>
-                                                <div class="d-flex gap-2 flex-wrap">
-                                                    <div class="input-group input-group-sm" style="max-width:240px;">
+                                                <div class="triplets-filters ms-auto">
+                                                    <div class="input-group input-group-sm" style="max-width:200px;">
                                                         <span class="input-group-text"><i class="bi bi-tags"></i></span>
                                                         <select id="triplets-tag-filter"
                                                             class="form-select form-select-sm"
@@ -471,7 +470,7 @@
                                                             <option value="">All tags</option>
                                                         </select>
                                                     </div>
-                                                    <div class="input-group input-group-sm" style="max-width:340px;">
+                                                    <div class="input-group input-group-sm" style="max-width:300px;">
                                                         <span class="input-group-text"><i class="bi bi-search"></i></span>
                                                         <input id="triplets-filter" class="form-control" type="text"
                                                             placeholder="Filter triplets..." />
@@ -501,52 +500,30 @@
                         aria-labelledby="compare-view-tab" style="min-height:0; overflow:auto;">
                         <section class="p-2 p-md-2 bg-white rounded-3 border">
 
-                            <!-- Source inventory: always shown, reflects Neo4j + current session -->
-                            <div id="compare-source-panel" class="mb-2 rounded border p-2" style="background:#f8fafc;">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <span class="fw-semibold small text-secondary">
-                                        <i class="bi bi-funnel me-1"></i>Sources to compare
-                                        <span id="compare-sources-loading" class="ms-1 d-none">
-                                            <span class="spinner-border spinner-border-sm text-secondary" style="width:.7rem;height:.7rem;border-width:1.5px;"></span>
-                                        </span>
-                                    </span>
-                                    <div class="d-flex gap-1">
-                                        <button id="compare-sources-select-all" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.72rem;">All</button>
-                                        <button id="compare-sources-clear" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:0.72rem;">None</button>
-                                        <button id="compare-sources-refresh" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Reload sources from Neo4j" style="font-size:0.72rem;">
-                                            <i class="bi bi-arrow-clockwise"></i>
-                                        </button>
-                                    </div>
+                            <!-- KB overview header + document selector (KB docs only) -->
+                            <div id="compare-source-panel" class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+                                <div>
+                                    <div class="fw-semibold"><i class="bi bi-diagram-3 text-primary me-1"></i>Knowledge graph overview</div>
+                                    <div class="text-muted small">Explore overlap, conflicts, alignment and ambiguity across the documents already in your knowledge graph.</div>
                                 </div>
-
-                                <div class="row g-2">
-                                    <!-- Left: Knowledge Graph sources (from Neo4j) -->
-                                    <div class="col-md-6">
-                                        <div class="rounded border p-2 h-100" style="background:#fff;">
-                                            <div class="d-flex align-items-center gap-1 mb-1">
-                                                <i class="bi bi-diagram-3 text-primary" style="font-size:0.8rem;"></i>
-                                                <span class="small fw-semibold text-primary">Knowledge Graph</span>
-                                                <span id="compare-graph-count" class="badge text-bg-primary ms-auto" style="font-size:0.65rem;"></span>
-                                            </div>
-                                            <div id="compare-graph-sources-wrap" class="d-flex flex-wrap gap-1">
-                                                <span class="text-muted small">Loading…</span>
-                                            </div>
-                                            <div id="compare-graph-sources-hint" class="text-muted mt-1" style="font-size:0.68rem;"></div>
+                                <div class="dropdown">
+                                    <button id="compare-docs-dropdown" class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                                        type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                        <i class="bi bi-folder2-open me-1"></i><span id="compare-docs-label">Documents</span>
+                                        <span id="compare-sources-loading" class="ms-1 d-none">
+                                            <span class="spinner-border spinner-border-sm" style="width:.65rem;height:.65rem;border-width:1.5px;"></span>
+                                        </span>
+                                    </button>
+                                    <div class="dropdown-menu dropdown-menu-end p-2 compare-docs-menu">
+                                        <div class="d-flex gap-1 mb-2">
+                                            <button id="compare-sources-select-all" class="btn btn-outline-secondary btn-sm py-0 px-2 flex-fill" style="font-size:0.72rem;">Select all</button>
+                                            <button id="compare-sources-clear" class="btn btn-outline-secondary btn-sm py-0 px-2 flex-fill" style="font-size:0.72rem;">Clear</button>
+                                            <button id="compare-sources-refresh" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Reload from the knowledge graph" style="font-size:0.72rem;">
+                                                <i class="bi bi-arrow-clockwise"></i>
+                                            </button>
                                         </div>
-                                    </div>
-                                    <!-- Right: Current session documents (from pipeline, before Neo4j insert) -->
-                                    <div class="col-md-6">
-                                        <div class="rounded border p-2 h-100" style="background:#fff;">
-                                            <div class="d-flex align-items-center gap-1 mb-1">
-                                                <i class="bi bi-file-earmark-text text-warning" style="font-size:0.8rem;"></i>
-                                                <span class="small fw-semibold text-warning-emphasis">Current Session</span>
-                                                <span id="compare-session-count" class="badge text-bg-warning ms-auto" style="font-size:0.65rem;"></span>
-                                            </div>
-                                            <div id="compare-session-sources-wrap" class="d-flex flex-wrap gap-1">
-                                                <span class="text-muted small">No active session</span>
-                                            </div>
-                                            <div id="compare-session-sources-hint" class="text-muted mt-1" style="font-size:0.68rem;"></div>
-                                        </div>
+                                        <div id="compare-graph-sources-wrap"><span class="text-muted small">Loading…</span></div>
+                                        <div id="compare-graph-sources-hint" class="text-muted mt-1" style="font-size:0.68rem;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -555,25 +532,25 @@
                                 <li class="nav-item" role="presentation">
                                     <button id="compare-overlap-tab" class="nav-link active btn-sm" data-bs-toggle="tab"
                                         data-bs-target="#compare-overlap" type="button" role="tab">
-                                        Overlap &amp; Coverage
+                                        <i class="bi bi-bar-chart-line me-1"></i>Overlap
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button id="compare-alignment-tab" class="nav-link btn-sm" data-bs-toggle="tab"
                                         data-bs-target="#compare-alignment" type="button" role="tab">
-                                        Alignment
+                                        <i class="bi bi-link-45deg me-1"></i>Alignment
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button id="compare-conflicts-tab" class="nav-link btn-sm" data-bs-toggle="tab"
                                         data-bs-target="#compare-conflicts" type="button" role="tab">
-                                        Conflicts
+                                        <i class="bi bi-exclamation-diamond me-1"></i>Conflicts
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <button id="compare-ambiguity-tab" class="nav-link btn-sm" data-bs-toggle="tab"
                                         data-bs-target="#compare-ambiguity" type="button" role="tab">
-                                        Ambiguity
+                                        <i class="bi bi-patch-question me-1"></i>Ambiguity
                                     </button>
                                 </li>
                             </ul>

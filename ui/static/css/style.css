@@ -178,6 +178,428 @@ body {
 .chunk-scores-toggle .bi-chevron-down { transition: transform 0.18s; }
 .chunk-scores-toggle.collapsed .bi-chevron-down { transform: rotate(-90deg); }
 
+/* Chunk-relevance panel — minimal, no duplicate title, light container. */
+.chunk-rel-panel {
+  border: 1px solid #eef2f7;
+  border-top: none;
+  border-radius: 0 0 0.375rem 0.375rem;
+  padding: 0.55rem 0.6rem;
+  background: #fff;
+}
+.chunk-rel-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.chunk-rel-dim {
+  max-width: 240px;
+  font-size: 0.74rem;
+}
+.chunk-rel-count {
+  background: #eef2f7;
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.66rem;
+}
+.chunk-rel-thresh {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  min-width: 240px;
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+.chunk-rel-thresh-label { font-size: 0.7rem; color: #64748b; white-space: nowrap; }
+.chunk-rel-thresh .form-range { flex: 1; }
+.chunk-rel-thresh .form-control { width: 4.6rem; font-size: 0.74rem; }
+.chunk-rel-table {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #f1f5f9;
+  border-radius: 0.375rem;
+}
+.chunk-rel-table table { font-size: 0.74rem; margin-bottom: 0; }
+.chunk-rel-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+.chunk-rel-hint { font-size: 0.64rem; color: #94a3b8; margin-top: 0.35rem; }
+
+/* Compare tab — KB document selector dropdown */
+.compare-docs-menu {
+  min-width: 260px;
+  max-height: 320px;
+  overflow: auto;
+}
+.compare-doc-item:hover { background: #f1f5f9; }
+.compare-doc-item .text-truncate { color: #334155; }
+
+/* ===================================================================== */
+/* UI polish layer — brand colours, softer cards, modern tab hierarchy.   */
+/* Visual only; does not change layout/flex/scroll behavior.              */
+/* ===================================================================== */
+:root {
+  --brand: #4f46e5;
+  --brand-2: #6366f1;
+  --brand-soft: #eef2ff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --line: #e7ebf2;
+}
+
+body {
+  background: linear-gradient(180deg, #f6f7fb 0%, #eef1f7 100%);
+  color: #1e293b;
+}
+
+/* Cards: softer, more rounded, gentle shadow */
+.card,
+.graph-wrapper,
+#oversight-section,
+#compare-view > section {
+  border: 1px solid var(--line) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+/* ── Header / toolbar ─────────────────────────────────────────────── */
+.pipeline-toolbar-card { padding: 0.85rem 1rem !important; }
+.pipeline-title { font-size: 1.06rem; letter-spacing: -0.01em; }
+.pipeline-title .bi { color: var(--brand); }
+.pipeline-subtitle { color: var(--muted); }
+
+.step-label { font-weight: 600; color: #334155; }
+.step-badge {
+  width: 20px; height: 20px;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.35);
+}
+.step-optional { background: var(--brand-soft); color: var(--brand); }
+
+/* Run button — brand-green, pill, subtle depth */
+#pipeline-run-btn.btn-success {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border: none;
+  border-radius: 999px;
+  padding-inline: 1.25rem;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.3);
+}
+#pipeline-run-btn.btn-success:hover:not(:disabled) { filter: brightness(1.05); }
+#pipeline-run-btn.btn-success:disabled { background: #cbd5e1; box-shadow: none; }
+
+#seed-graph-btn {
+  border-radius: 10px;
+  border-color: #c7d2fe;
+  color: var(--brand);
+  font-weight: 600;
+}
+#seed-graph-btn:hover { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+
+/* ── Primary navigation: segmented top tabs (#view-tabs) ──────────── */
+#view-tabs.nav-tabs {
+  border-bottom: none;
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: #e9edf5;
+  border-radius: 12px;
+  margin-bottom: 0.6rem !important;
+}
+#view-tabs .nav-item { margin: 0; }
+#view-tabs .nav-link {
+  border: none !important;
+  border-radius: 9px;
+  padding: 0.42rem 0.95rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+#view-tabs .nav-link:hover { color: #334155; background: rgba(255, 255, 255, 0.6); }
+#view-tabs .nav-link.active {
+  color: var(--brand);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+/* ── Secondary navigation: Compare sub-tabs (smaller than parent) ──── */
+#compare-inner-tabs.nav-pills {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.18rem;
+  background: #f1f5f9;
+  border-radius: 9px;
+}
+#compare-inner-tabs .nav-link {
+  padding: 0.38rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 8px;
+}
+#compare-inner-tabs .nav-link:hover { color: #334155; }
+#compare-inner-tabs .nav-link.active {
+  background: #fff;
+  color: var(--brand);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+/* Oversight inner tabs (Existing / Partial / New) — clean underline */
+#oversight-inner-tabs.nav-tabs { border-bottom: 1px solid #e2e8f0; gap: 0.25rem; }
+#oversight-inner-tabs .nav-link {
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0.35rem 0.7rem;
+}
+#oversight-inner-tabs .nav-link.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand) !important;
+  background: transparent;
+}
+
+/* KB-overview header icon */
+#compare-source-panel .bi-diagram-3 { color: var(--brand); }
+
+/* ── Sleeker toolbar: uniform controls + modern accent ─────────────── */
+.pipeline-toolbar-card { position: relative; overflow: hidden; }
+.pipeline-toolbar-card::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-2) 55%, #22c55e 100%);
+}
+
+/* Every control in the toolbar is the same comfortable height + radius */
+.pipeline-toolbar .form-select,
+.pipeline-toolbar .form-control,
+.pipeline-toolbar .btn,
+.pipeline-toolbar .input-group {
+  min-height: 38px;
+  border-radius: 10px;
+}
+.pipeline-toolbar .input-group .form-control { border-radius: 0 10px 10px 0; }
+.pipeline-toolbar .input-group-text { border-radius: 10px 0 0 10px; }
+
+/* Load baseline KB + Tune thresholds: single line, never taller than peers */
+#seed-graph-btn,
+#jump-to-thresholds {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#pipeline-run-btn.btn-success { min-height: 38px; padding-inline: 1.5rem; }
+
+/* A touch more separation between the title and the step row */
+.pipeline-header { padding-bottom: 0.55rem; border-bottom: 1px solid #eef1f7; margin-bottom: 0.85rem; }
+
+/* Sub-tab icons inherit the muted/active colour cleanly */
+#compare-inner-tabs .nav-link i { font-size: 0.82rem; }
+
+/* ── Compare analysis content: organized sections ─────────────────── */
+.kb-section { margin-bottom: 1.15rem; }
+.kb-section-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+.kb-section-title .bi { color: var(--brand); }
+.kb-section-sub { font-weight: 400; color: #94a3b8; font-size: 0.72rem; }
+
+/* Per-document coverage as stat cards */
+.kb-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.6rem;
+}
+.kb-stat-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.8rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.kb-stat-doc {
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.5rem;
+}
+.kb-stat-doc .bi { color: var(--brand); margin-right: 0.3rem; }
+.kb-stat-row { display: flex; gap: 1rem; }
+.kb-stat { display: flex; flex-direction: column; line-height: 1.1; }
+.kb-stat-num { font-size: 1.3rem; font-weight: 700; color: var(--brand); }
+.kb-stat-label { font-size: 0.62rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Concept coverage matrix */
+.kb-matrix-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #eef1f7;
+  border-radius: 10px;
+}
+.kb-matrix-wrap table { font-size: 0.76rem; margin-bottom: 0; }
+.kb-matrix-wrap thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+  font-weight: 600;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.kb-matrix-wrap td { color: #475569; }
+.kb-matrix-wrap td.kb-zero { color: #cbd5e1; }
+.kb-matrix-wrap tr.kb-shared td:first-child { box-shadow: inset 3px 0 0 var(--brand); }
+.kb-badge-shared {
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 0.58rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.02rem 0.4rem;
+  margin-left: 0.35rem;
+}
+.kb-empty-card {
+  border: 1px dashed #d8dee9;
+  border-radius: 10px;
+  padding: 0.8rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  background: #fafbfd;
+}
+/* Agreement / tension chips in the shared-assertions table */
+.kb-verdict-agree { background: #dcfce7; color: #166534; }
+.kb-verdict-tension { background: #fef3c7; color: #92400e; }
+
+/* ── Extracted-triplets review: toolbar, counts, filters, table ───── */
+/* Branded button variants */
+.btn-soft-primary {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border: 1px solid #c7d2fe;
+  font-weight: 600;
+  border-radius: 9px;
+}
+.btn-soft-primary:hover { background: #e0e7ff; color: var(--brand); border-color: var(--brand); }
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  font-weight: 600;
+  border-radius: 9px;
+}
+.btn-ghost:hover { background: #f1f5f9; color: #334155; }
+
+.triplets-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid #eef1f7;
+}
+.triplets-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+#triplets-submit.btn-success {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border: none;
+  border-radius: 9px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.28);
+}
+#triplets-submit.btn-success:disabled { background: #cbd5e1; box-shadow: none; }
+#triplets-submit.btn-success:hover:not(:disabled) { filter: brightness(1.05); }
+
+/* Count chips */
+.triplets-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+.triplets-counts { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.tcount {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+.tcount span { font-weight: 700; }
+.tcount-inc { background: #dcfce7; color: #166534; }
+.tcount-exc { background: #eef2f7; color: #64748b; }
+.tcount-del { background: #fee2e2; color: #991b1b; }
+.triplets-filters { display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center; }
+/* Bootstrap input-groups are width:100% by default, which makes them wrap onto
+   separate lines inside a flex row — size them to their content instead. */
+.triplets-filters .input-group { width: auto; flex: 0 0 auto; }
+.triplets-filters .input-group-text { background: #f8fafc; border-radius: 9px 0 0 9px; }
+.triplets-filters .form-select,
+.triplets-filters .form-control { font-size: 0.78rem; }
+@media (max-width: 640px) {
+  .triplets-filters { flex-wrap: wrap; }
+}
+
+/* Table polish */
+#triplets-table-wrap table { font-size: 0.8rem; }
+#triplets-table-wrap thead th {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+#triplets-table-wrap tbody td { vertical-align: middle; }
+#triplets-table-wrap .form-control {
+  font-size: 0.8rem;
+  background: #fbfcfe;
+  border: 1px solid #e7ebf2;
+  border-radius: 7px;
+}
+#triplets-table-wrap .form-control:focus {
+  background: #fff;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.12);
+}
+/* Soften the schema-review row highlight to match the palette */
+#triplets-table-wrap tr.table-warning { --bs-table-bg: #fffaf0; }
+#triplets-table-wrap .triplet-toggle-delete {
+  border-radius: 7px;
+}
+
 
 /* Utility */
 .hidden {
@@ -623,6 +1045,58 @@ body {
   max-height: 10rem;
   overflow: auto;
 }
+
+/* ===================================================================== */
+/* Compare-tab analyses — unified table style matching Review & extract.  */
+/* Headings bold/uppercase/muted; cells normal weight + consistent size;  */
+/* full width; light borders; hover. No bold in cells.                    */
+/* ===================================================================== */
+#compare-view section { width: 100%; }
+#compare-inner-tabs-content { width: 100%; }
+
+#compare-inner-tabs-content .table-responsive,
+#compare-inner-tabs-content .kb-matrix-wrap {
+  border: 1px solid #eef1f7;
+  border-radius: 10px;
+  overflow: auto;
+}
+#compare-inner-tabs-content table {
+  width: 100%;
+  font-size: 0.8rem;
+  margin-bottom: 0;
+}
+#compare-inner-tabs-content thead th {
+  background: #f8fafc;
+  color: #64748b !important;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+/* Cells: normal weight, consistent size/colour (no bold). Leading cell gets
+   a darker colour for hierarchy instead of bold. */
+#compare-inner-tabs-content tbody td {
+  font-weight: 400 !important;
+  font-size: 0.8rem;
+  color: #475569;
+  vertical-align: middle;
+}
+#compare-inner-tabs-content tbody td:first-child { color: #1e293b; }
+#compare-inner-tabs-content tbody tr:hover td { background: #f8fafc; }
+
+/* Concept matrix: keep the concept column flexible, centre the numeric
+   per-document columns so the matrix reads cleanly across the full width. */
+#compare-concepts-wrap .kb-matrix-wrap th:first-child,
+#compare-concepts-wrap .kb-matrix-wrap td:first-child { width: 46%; text-align: left; }
+#compare-concepts-wrap .kb-matrix-wrap th:not(:first-child),
+#compare-concepts-wrap .kb-matrix-wrap td:not(:first-child) { text-align: center; }
+
+/* Alignment / Conflicts decision buttons + similarity badge consistency */
+#compare-inner-tabs-content .btn-group-sm > .btn { font-size: 0.72rem; }
+#compare-alignment-wrap td .badge,
+#compare-inner-tabs-content td .badge { font-weight: 600; }
 
 
 .triplets-skipped-item {

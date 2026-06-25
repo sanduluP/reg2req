@@ -127,36 +127,30 @@ function render(container) {
     const sortArrow = state.sortDesc ? "↓" : "↑";
 
     container.innerHTML = `
-      <div class="border rounded p-2" style="background:#fffdf5;">
-        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-          <span class="small fw-semibold text-secondary"><i class="bi bi-funnel me-1"></i>Chunk relevance</span>
-          <select id="chunk-scores-dim" class="form-select form-select-sm" style="max-width:260px; font-size:0.74rem;">${dimOptions}</select>
-          <span class="small text-muted" id="chunk-scores-summary">${keptCount}/${chunks.length} included</span>
+      <div class="chunk-rel-panel">
+        <div class="chunk-rel-controls">
+          <select id="chunk-scores-dim" class="form-select form-select-sm chunk-rel-dim" title="Focus area">${dimOptions}</select>
+          <div class="chunk-rel-thresh">
+            <span class="chunk-rel-thresh-label">Threshold</span>
+            <input type="range" class="form-range" id="chunk-scores-threshold"
+                   min="0" max="1" step="0.01" value="${state.threshold}">
+            <input type="number" class="form-control form-control-sm" id="chunk-scores-threshold-num"
+                   min="0" max="1" step="0.01" value="${state.threshold}">
+          </div>
         </div>
 
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <label class="small text-secondary mb-0" style="white-space:nowrap;">Relevance threshold</label>
-          <input type="range" class="form-range" id="chunk-scores-threshold"
-                 min="0" max="1" step="0.01" value="${state.threshold}" style="flex:1; max-width:340px;">
-          <input type="number" class="form-control form-control-sm" id="chunk-scores-threshold-num"
-                 min="0" max="1" step="0.01" value="${state.threshold}" style="width:5.2rem; font-size:0.74rem;">
-        </div>
-
-        <div style="max-height:320px; overflow:auto;">
-          <table class="table table-sm table-hover align-middle mb-0" style="font-size:0.78rem;">
+        <div class="chunk-rel-table">
+          <table class="table table-sm table-hover align-middle mb-0">
             <thead><tr>
-              <th style="width:3rem;">#</th>
-              <th style="width:7rem; cursor:pointer; user-select:none;" id="chunk-scores-sort" title="Sort by score">Score ${sortArrow}</th>
-              <th style="width:11rem;">Status</th>
-              <th>Chunk excerpt</th>
+              <th style="width:2.4rem;">#</th>
+              <th style="width:5rem; cursor:pointer; user-select:none;" id="chunk-scores-sort" title="Sort by score">Score ${sortArrow}</th>
+              <th style="width:6rem;">Status</th>
+              <th>Excerpt</th>
             </tr></thead>
             <tbody>${rows || `<tr><td colspan="4" class="text-muted">No chunks.</td></tr>`}</tbody>
           </table>
         </div>
-        <div class="text-muted mt-1" style="font-size:0.66rem;">
-          <i class="bi bi-info-circle me-1"></i>Drag the threshold to include/exclude chunks live (literal keyword matches stay included).
-          This value is applied to your next run.
-        </div>
+        <div class="chunk-rel-hint"><i class="bi bi-info-circle me-1"></i>Drag the threshold to include/exclude chunks — applied to your next run.</div>
       </div>`;
 
     wire(container);

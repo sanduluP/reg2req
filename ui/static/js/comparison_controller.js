@@ -142,160 +142,93 @@ function notEnoughGraphDocsHint(kind) {
 /* ======================== Source selector ======================== */
 
 async function loadSources() {
-    const loadingSpinner = el("compare-sources-loading");
-    if (loadingSpinner) loadingSpinner.classList.remove("d-none");
+    const spinner = el("compare-sources-loading");
+    if (spinner) spinner.classList.remove("d-none");
 
-    // 1) Neo4j sources — always try, even before any pipeline run
+    // The Compare tab is a KB OVERVIEW: it only analyses documents already in
+    // the knowledge graph (Neo4j). Pre-merge comparison happens elsewhere
+    // ("Check against KB" on the review screen), so there is no session section.
     let neo4jSources = [];
     try {
         const data = await fetchComparisonSources();
         neo4jSources = Array.isArray(data.neo4j_sources) ? data.neo4j_sources : [];
     } catch (e) {
-        console.warn("Could not fetch Neo4j sources:", e);
+        console.warn("Could not fetch KB sources:", e);
     }
 
-    // 2) Session sources — documents from the current pipeline run, before Neo4j submission
-    const ctx = getRunContext();
-    const sessionNames = Array.isArray(ctx?.source_names)
-        ? ctx.source_names
-        : (ctx?.source_name ? [ctx.source_name] : []);
+    state.allSources = neo4jSources.map(n => ({ name: n, type: "graph" }));
+    state.selectedSources = null; // default: all selected
 
-    const neo4jSet = new Set(neo4jSources);
-    // Session docs not yet in the graph get their own section
-    const sessionOnly = sessionNames.filter(n => !neo4jSet.has(n));
+    _renderDocChecklist(neo4jSources);
+    _updateDocsLabel();
 
-    // Combined for filter logic: graph first, then session-only
-    state.allSources = [
-        ...neo4jSources.map(n => ({ name: n, type: "graph" })),
-        ...sessionOnly.map(n => ({ name: n, type: "session" })),
-    ];
-    state.selectedSources = null; // default: all
-
-    _renderGraphSourceSection(neo4jSources);
-    _renderSessionSourceSection(sessionOnly, neo4jSources.length > 0);
-
-    if (loadingSpinner) loadingSpinner.classList.add("d-none");
+    if (spinner) spinner.classList.add("d-none");
 }
 
-function _renderGraphSourceSection(neo4jSources) {
+/** Render the KB documents as a checkbox list inside the selector dropdown. */
+function _renderDocChecklist(sources) {
     const wrap = el("compare-graph-sources-wrap");
     const hint = el("compare-graph-sources-hint");
-    const count = el("compare-graph-count");
-
     if (!wrap) return;
 
-    if (count) count.textContent = neo4jSources.length ? String(neo4jSources.length) : "";
-
-    if (neo4jSources.length === 0) {
-        wrap.innerHTML = `<span class="text-muted small">No knowledge in graph yet.</span>`;
+    if (!sources.length) {
+        wrap.innerHTML = `<div class="text-muted small px-1 py-2">No documents in the knowledge graph yet.</div>`;
         if (hint) hint.innerHTML =
-            `Run the pipeline on PDFs, then <em>Submit to KG</em> — ` +
-            `or use <em>Initialize graph</em> (toolbar step 1) to load baseline knowledge.`;
+            `Run the pipeline on a PDF, then <em>Submit to KG</em> — or use <em>Initialize graph</em> to load baseline knowledge.`;
         return;
     }
+    if (hint) hint.textContent = "Tick documents to include in the analysis.";
 
     wrap.innerHTML = "";
-    if (hint) hint.textContent = "Click a source to toggle it in/out of the analysis.";
-
-    for (const name of neo4jSources) {
-        wrap.appendChild(_makeChip(name, "graph"));
+    for (const name of sources) {
+        const isSel = state.selectedSources === null || state.selectedSources.has(name);
+        const item = document.createElement("label");
+        item.className = "dropdown-item d-flex align-items-center gap-2 px-2 py-1 compare-doc-item";
+        item.style.cssText = "cursor:pointer; font-size:0.78rem; border-radius:0.3rem;";
+        item.innerHTML =
+            `<input type="checkbox" class="form-check-input m-0 compare-doc-cb" ${isSel ? "checked" : ""}>` +
+            `<span class="text-truncate" style="max-width:220px;" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`;
+        const cb = item.querySelector(".compare-doc-cb");
+        cb.dataset.sourceName = name;
+        cb.addEventListener("change", () => {
+            if (state.selectedSources === null) {
+                state.selectedSources = new Set(state.allSources.map(s => s.name));
+            }
+            if (cb.checked) state.selectedSources.add(name);
+            else state.selectedSources.delete(name);
+            if (state.selectedSources.size === state.allSources.length) state.selectedSources = null;
+            _updateDocsLabel();
+        });
+        wrap.appendChild(item);
     }
 }
 
-function _renderSessionSourceSection(sessionOnly, graphHasData) {
-    const wrap = el("compare-session-sources-wrap");
-    const hint = el("compare-session-sources-hint");
-    const count = el("compare-session-count");
-
-    if (!wrap) return;
-
-    if (count) count.textContent = sessionOnly.length ? String(sessionOnly.length) : "";
-
-    if (sessionOnly.length === 0) {
-        const ctx = getRunContext();
-        const hasSession = ctx?.source_names?.length > 0 || ctx?.source_name;
-        if (hasSession) {
-            // Session docs exist but ALL are already in the graph
-            wrap.innerHTML = `<span class="text-muted small">All session docs already in graph.</span>`;
-            if (hint) hint.textContent = "";
-        } else {
-            wrap.innerHTML = `<span class="text-muted small">No active session.</span>`;
-            if (hint) hint.textContent = "Run the pipeline to see current documents here.";
-        }
-        return;
-    }
-
-    wrap.innerHTML = "";
-    for (const name of sessionOnly) {
-        wrap.appendChild(_makeChip(name, "session"));
-    }
-    if (hint) hint.innerHTML =
-        `Not yet in Neo4j — go to <em>Review &amp; extract</em> → Submit to KG to persist.`;
+/** Summarise the selection on the dropdown button. */
+function _updateDocsLabel() {
+    const label = el("compare-docs-label");
+    if (!label) return;
+    const total = state.allSources.length;
+    if (total === 0) { label.textContent = "Documents"; return; }
+    const sel = state.selectedSources === null ? total : state.selectedSources.size;
+    label.textContent = (sel === total) ? `All documents (${total})` : `Documents (${sel}/${total})`;
 }
 
-function _makeChip(name, type) {
-    const isSelected = state.selectedSources === null || state.selectedSources.has(name);
-    const isSession = type === "session";
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.dataset.sourceName = name;
-    btn.dataset.sourceType = type;
-    btn.className = [
-        "btn btn-sm py-0 px-2",
-        isSelected
-            ? (isSession ? "btn-warning" : "btn-primary")
-            : "btn-outline-secondary",
-    ].join(" ");
-    btn.style.cssText = "font-size:0.72rem; border-radius:999px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-    btn.title = `${isSession ? "Session" : "Graph"} source: ${name}`;
-    btn.textContent = name;
-
-    btn.addEventListener("click", () => {
-        if (state.selectedSources === null) {
-            state.selectedSources = new Set(state.allSources.map(s => s.name));
-        }
-        if (state.selectedSources.has(name)) {
-            state.selectedSources.delete(name);
-        } else {
-            state.selectedSources.add(name);
-        }
-        if (state.selectedSources.size === state.allSources.length) {
-            state.selectedSources = null;
-        }
-        _updateChipStyles();
-    });
-
-    return btn;
-}
-
-function _updateChipStyles() {
-    // Update visual state without re-rendering the whole list
-    const allChips = document.querySelectorAll(
-        "#compare-graph-sources-wrap button[data-source-name], " +
-        "#compare-session-sources-wrap button[data-source-name]"
-    );
-    allChips.forEach(btn => {
-        const name = btn.dataset.sourceName;
-        const isSession = btn.dataset.sourceType === "session";
-        const isSelected = state.selectedSources === null || state.selectedSources.has(name);
-        btn.className = [
-            "btn btn-sm py-0 px-2",
-            isSelected
-                ? (isSession ? "btn-warning" : "btn-primary")
-                : "btn-outline-secondary",
-        ].join(" ");
+function _updateDocCheckboxes() {
+    document.querySelectorAll(".compare-doc-cb").forEach(cb => {
+        cb.checked = state.selectedSources === null || state.selectedSources.has(cb.dataset.sourceName);
     });
 }
 
 function selectAllSources() {
     state.selectedSources = null;
-    _updateChipStyles();
+    _updateDocCheckboxes();
+    _updateDocsLabel();
 }
 
 function clearAllSources() {
     state.selectedSources = new Set();
-    _updateChipStyles();
+    _updateDocCheckboxes();
+    _updateDocsLabel();
 }
 
 /* ------------------------------ Overlap ------------------------------ */
@@ -318,73 +251,79 @@ async function refreshOverlap() {
 function renderOverlap() {
     const report = state.overlap || {};
 
-    // 1) Coverage per document
+    // 1) Document coverage — one stat card per document.
     const coverage = Array.isArray(report.coverage) ? report.coverage : [];
-    const covRows = coverage.map(c => `
-      <tr>
-        <td class="fw-semibold">${escapeHtml(c.doc)}</td>
-        <td>${c.assertions}</td>
-        <td>${c.concepts}</td>
-        <td>${c.normative_statements}</td>
-      </tr>
-    `);
+    const cards = coverage.map(c => `
+      <div class="kb-stat-card">
+        <div class="kb-stat-doc" title="${escapeHtml(c.doc)}"><i class="bi bi-file-earmark-text"></i>${escapeHtml(c.doc)}</div>
+        <div class="kb-stat-row">
+          <div class="kb-stat"><span class="kb-stat-num">${c.assertions}</span><span class="kb-stat-label">assertions</span></div>
+          <div class="kb-stat"><span class="kb-stat-num">${c.concepts}</span><span class="kb-stat-label">concepts</span></div>
+          <div class="kb-stat"><span class="kb-stat-num">${c.normative_statements}</span><span class="kb-stat-label">normative</span></div>
+        </div>
+      </div>`).join("");
     el("compare-coverage-wrap").innerHTML = `
-      <div class="fw-semibold small text-muted mb-1">Document coverage</div>
-      ${simpleTable(["Document", "Assertions", "Concepts", "Normative statements"], covRows, {
-        emptyText: "No provenance-carrying edges in the graph yet. Run the pipeline and submit triplets first.",
-    })}
-    `;
+      <div class="kb-section">
+        <div class="kb-section-title"><i class="bi bi-files"></i>Document coverage</div>
+        ${coverage.length
+          ? `<div class="kb-stat-cards">${cards}</div>`
+          : `<div class="kb-empty-card">No documents in the knowledge graph yet — run the pipeline, then <em>Submit to KG</em>.</div>`}
+      </div>`;
 
-    // 2) Multi-document assertions (the overlap itself), with agreement/tension verdict
+    // 2) Assertions supported by 2+ documents (agreement / tension).
     const overlap = Array.isArray(report.overlap) ? report.overlap : [];
     const ovRows = overlap.map(o => {
         const verdict = String(o.verdict || "AGREEMENT").toUpperCase();
         const verdictBadge = verdict === "TENSION"
-            ? `<span class="badge text-bg-warning" title="Same assertion, different obligation strength">⚠ Tension</span>`
-            : `<span class="badge text-bg-success" title="Documents agree">✓ Agreement</span>`;
+            ? `<span class="badge kb-verdict-tension" title="Same assertion, different obligation strength">⚠ Tension</span>`
+            : `<span class="badge kb-verdict-agree" title="Documents agree">✓ Agreement</span>`;
         const docsCol = (o.docs || []).map(d => {
             const m = o.modality_by_doc?.[d];
-            const mTag = m ? ` <span class="badge text-bg-primary" style="font-size:0.6rem;">${escapeHtml(m.toLowerCase())}</span>` : "";
-            return `<span class="badge text-bg-info me-1">${escapeHtml(d)}${mTag}</span>`;
+            const mTag = m ? ` <span class="badge text-bg-light border" style="font-size:0.6rem;">${escapeHtml(m.toLowerCase())}</span>` : "";
+            return `<span class="badge text-bg-secondary me-1" style="font-weight:500;">${escapeHtml(d)}${mTag}</span>`;
         }).join("");
-        return `
-      <tr>
-        <td>${escapeHtml(o.source)}</td>
-        <td class="text-muted">${escapeHtml(formatPredicateLabel(o.predicate))}</td>
-        <td>${escapeHtml(o.target)}</td>
-        <td>${verdictBadge}</td>
-        <td>${docsCol}</td>
-      </tr>`;
+        return `<tr>
+          <td class="fw-semibold">${escapeHtml(o.source)}</td>
+          <td class="text-muted">${escapeHtml(formatPredicateLabel(o.predicate))}</td>
+          <td>${escapeHtml(o.target)}</td>
+          <td>${verdictBadge}</td>
+          <td>${docsCol}</td>
+        </tr>`;
     });
     el("compare-overlap-wrap").innerHTML = `
-      <div class="fw-semibold small text-muted mb-1">Assertions supported by multiple documents
-        <span class="text-muted fw-normal">— tension = same subject/relation/object but different obligation strength</span>
-      </div>
-      ${simpleTable(["Subject", "Predicate", "Object", "Verdict", "Documents (modality)"], ovRows, {
-        emptyText: "No assertion is supported by more than one document yet.",
-    })}
-    `;
+      <div class="kb-section">
+        <div class="kb-section-title"><i class="bi bi-intersect"></i>Shared assertions
+          <span class="kb-section-sub">— same statement in 2+ documents · tension = different obligation strength</span>
+        </div>
+        ${overlap.length
+          ? simpleTable(["Subject", "Predicate", "Object", "Verdict", "Documents"], ovRows)
+          : `<div class="kb-empty-card">No assertion is supported by more than one document yet.</div>`}
+      </div>`;
 
-    // 3) Concept × document matrix
+    // 3) Concept × document matrix — shared concepts marked.
     const concepts = report.concepts || {};
     const docs = Array.isArray(concepts.documents) ? concepts.documents : [];
     const rows = Array.isArray(concepts.rows) ? concepts.rows : [];
-    const conceptRows = rows.slice(0, 100).map(r => `
-      <tr>
-        <td class="fw-semibold">${escapeHtml(r.concept)}</td>
-        ${docs.map(d => {
-            const n = r.counts?.[d] || 0;
-            return `<td class="${n ? "" : "text-muted"}">${n || "—"}</td>`;
-        }).join("")}
-        <td>${r.docs}</td>
-      </tr>
-    `);
+    const conceptRows = rows.slice(0, 100).map(r => {
+        const shared = (r.docs || 0) > 1;
+        const sharedBadge = shared ? `<span class="kb-badge-shared">shared</span>` : "";
+        return `<tr class="${shared ? "kb-shared" : ""}">
+          <td class="fw-semibold">${escapeHtml(r.concept)}${sharedBadge}</td>
+          ${docs.map(d => { const n = r.counts?.[d] || 0; return `<td class="${n ? "" : "kb-zero"}">${n || "·"}</td>`; }).join("")}
+          <td class="text-center">${r.docs}</td>
+        </tr>`;
+    }).join("");
+    const header = `<th>Concept</th>${docs.map(d => `<th>${escapeHtml(d)}</th>`).join("")}<th class="text-center"># Docs</th>`;
     el("compare-concepts-wrap").innerHTML = `
-      <div class="fw-semibold small text-muted mb-1">Concept coverage matrix (top 100; shared concepts first)</div>
-      ${simpleTable(["Concept", ...docs, "# Docs"], conceptRows, {
-        emptyText: "No concepts with provenance yet.",
-    })}
-    `;
+      <div class="kb-section">
+        <div class="kb-section-title"><i class="bi bi-grid-3x3-gap"></i>Concept coverage
+          <span class="kb-section-sub">— shared concepts first (top 100)</span>
+        </div>
+        ${rows.length
+          ? `<div class="kb-matrix-wrap"><table class="table table-sm table-hover align-middle">
+               <thead><tr>${header}</tr></thead><tbody>${conceptRows}</tbody></table></div>`
+          : `<div class="kb-empty-card">No concepts with provenance yet.</div>`}
+      </div>`;
 }
 
 function exportOverlap() {
