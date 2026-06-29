@@ -387,6 +387,39 @@ export function exportRowsAsXlsx({ rows, sheetName, filename }) {
 
 
 /**
+ * Generic: export several sheets into one workbook. Empty sheets are skipped;
+ * the call fails only when every sheet is empty.
+ *
+ * @param {Object} opts
+ * @param {{ name: string, rows: Object[] }[]} opts.sheets
+ * @param {string} opts.filename
+ * @returns {{ ok: true, count: number } | { ok: false, reason: string }}
+ */
+export function exportSheetsAsXlsx({ sheets, filename }) {
+    const XLSX_LIB = globalThis.XLSX;
+    if (!XLSX_LIB) {
+        return { ok: false, reason: "XLSX export is not available because SheetJS is not loaded." };
+    }
+    const nonEmpty = (sheets || []).filter(s => Array.isArray(s.rows) && s.rows.length > 0);
+    if (nonEmpty.length === 0) {
+        return { ok: false, reason: "No rows to export." };
+    }
+
+    const wb = XLSX_LIB.utils.book_new();
+    let total = 0;
+    for (const s of nonEmpty) {
+        const ws = XLSX_LIB.utils.json_to_sheet(s.rows);
+        if (ws["!ref"]) ws["!autofilter"] = { ref: ws["!ref"] };
+        XLSX_LIB.utils.book_append_sheet(wb, ws, worksheetName(s.name || "Sheet"));
+        total += s.rows.length;
+    }
+    XLSX_LIB.writeFile(wb, filename || "kbdebugger_export.xlsx");
+
+    return { ok: true, count: total };
+}
+
+
+/**
  * Export extracted triplets for human review into one Excel workbook.
  *
  * @param {Object} opts

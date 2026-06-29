@@ -9,9 +9,26 @@
  * Any module can then call refreshGraphForKeyword(keyword) to refetch + re-render.
  */
 
-import { getSubgraph } from "./graph_client.js";
+import { getSubgraph, getFullGraph, getSearchKeywords } from "./graph_client.js";
 
 let _renderSubgraph = null;
+
+// Cache the curated dimension list so we can tell a real single-dimension
+// keyword (valid for /subgraph) from a human run-label like "All dimensions",
+// "Whole document", or "Custom: …" (which the subgraph endpoint rejects).
+let _dimensionSet = null;
+async function isCuratedDimension(keyword) {
+    if (!keyword) return false;
+    if (!_dimensionSet) {
+        try {
+            const data = await getSearchKeywords();
+            _dimensionSet = new Set(data.keywords || []);
+        } catch (_) {
+            _dimensionSet = new Set();
+        }
+    }
+    return _dimensionSet.has(keyword);
+}
 
 /**
  * Register a callback that knows how to render the subgraph payload.
@@ -32,6 +49,11 @@ export async function refreshGraphForKeyword(keyword) {
     if (!_renderSubgraph) {
         throw new Error("Graph renderer not registered. Did you call registerSubgraphRenderer() in main.js?");
     }
-    const payload = await getSubgraph(keyword);
+    // Single curated dimensions can be fetched as a focused subgraph. Multi-
+    // dimension ("All dimensions"), whole-document, and custom runs carry a
+    // human label that isn't a valid subgraph keyword — show the full graph.
+    const payload = (await isCuratedDimension(keyword))
+        ? await getSubgraph(keyword)
+        : await getFullGraph();
     _renderSubgraph(payload);
 }

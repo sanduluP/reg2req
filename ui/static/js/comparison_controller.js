@@ -25,7 +25,7 @@ import {
 import { getRunContext } from "./state/oversight_state.js";
 import { getJobStatus } from "./pipeline_client.js";
 import { showToast } from "./toast.js";
-import { exportRowsAsXlsx } from "./utils/export_utils.js";
+import { exportRowsAsXlsx, exportSheetsAsXlsx } from "./utils/export_utils.js";
 import { formatPredicateLabel } from "./utils/predicate_format.js";
 
 const state = {
@@ -332,7 +332,17 @@ function exportOverlap() {
         showToast({ type: "warning", title: "Nothing to export", message: "Refresh the overlap report first." });
         return;
     }
-    const rows = (report.overlap || []).map(o => ({
+    // The Overlap view has three parts — export each as its own sheet so the
+    // download reflects what's on screen (shared assertions are often empty
+    // because they require the same statement in 2+ documents).
+    const coverageRows = (report.coverage || []).map(c => ({
+        Document: c.doc,
+        Assertions: c.assertions,
+        Concepts: c.concepts,
+        "Normative statements": c.normative_statements,
+    }));
+
+    const sharedRows = (report.overlap || []).map(o => ({
         Subject: o.source,
         Predicate: o.predicate,
         Object: o.target,
@@ -341,13 +351,26 @@ function exportOverlap() {
         Documents: (o.docs || []).join(", "),
         Evidence: (o.records || []).map(r => `[${r.doc}] ${r.quality || r.chunk_excerpt || ""}`).join("\n"),
     }));
-    const result = exportRowsAsXlsx({
-        rows,
-        sheetName: "Overlap",
+
+    const concepts = report.concepts || {};
+    const cDocs = Array.isArray(concepts.documents) ? concepts.documents : [];
+    const conceptRows = (concepts.rows || []).map(r => {
+        const row = { Concept: r.concept };
+        for (const d of cDocs) row[d] = r.counts?.[d] || 0;
+        row["# Docs"] = r.docs;
+        return row;
+    });
+
+    const result = exportSheetsAsXlsx({
+        sheets: [
+            { name: "Document coverage", rows: coverageRows },
+            { name: "Shared assertions", rows: sharedRows },
+            { name: "Concept matrix", rows: conceptRows },
+        ],
         filename: "kbdebugger_overlap.xlsx",
     });
     showToast(result.ok
-        ? { type: "success", title: "Exported", message: `${result.count} overlap rows downloaded.` }
+        ? { type: "success", title: "Exported", message: `${result.count} row(s) across coverage, shared assertions and concepts.` }
         : { type: "warning", title: "Nothing to export", message: result.reason });
 }
 
