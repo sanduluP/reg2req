@@ -1,0 +1,457 @@
+% ============================================================
+%  Appendix
+% ============================================================
+\appendix
+
+% ────────────────────────────────────────────────────────────
+\section{LLM Prompt Templates}
+\label{app:prompts}
+
+All LLM calls in KBDebugger use the prompt templates below, loaded
+verbatim from \texttt{src/kbdebugger/prompts/}.  Template variables
+(e.g.\ \texttt{\$examples\_json}, \texttt{\$chunks\_json}) are
+substituted at call time with serialised JSON.  Every call uses
+temperature~0.0 and requests strict JSON output; no chain-of-thought
+scratchpad is exposed outside the structured fields.
+
+% ----------------------------------------------------------
+\subsection{Stage 2c — Atomic Quality Decomposition (batch)}
+\label{app:prompt-decompose-batch}
+
+Used by Stage~2c to decompose up to \texttt{\$max\_qualities\_per\_chunk}
+atomic quality sentences per chunk in a single batched LLM call.
+
+\begin{lstlisting}[language={},breaklines=true,caption={}]
+You are a careful assistant. Your task is to extract clear, atomic
+"qualities" from EACH provided text chunk.
+
+You will be given a JSON object containing multiple chunks. Each chunk has:
+- an integer "id"
+- a string "text"
+
+You MUST return a single strict JSON object with this exact structure:
+{
+  "results": [
+    {"id": 0, "qualities": ["...", "..."]},
+    {"id": 1, "qualities": ["...", ...]}
+  ]
+}
+
+Hard requirements:
+- Output MUST be strict JSON (double quotes only). No markdown. No extra keys.
+- The "results" array MUST contain exactly one entry per input chunk id.
+- Each entry MUST preserve the original integer "id".
+- Each "qualities" value MUST be a JSON array of strings (even if empty).
+- Use ONLY information explicitly present in the corresponding chunk text.
+  Never add external facts.
+- If nothing meaningful can be extracted from a chunk, return an empty list.
+
+What is a "quality":
+- A quality is a short statement expressing exactly ONE fact (one atomic idea).
+- Qualities will later be converted into S-P-O triplets. Therefore, each
+  quality MUST be phrased so that a triplet can be extracted unambiguously.
+
+Guidelines for qualities:
+- Use explicit entities instead of pronouns.
+  BAD: "He discovered relativity."
+  GOOD: "Einstein discovered relativity."
+- Preserve conditional meaning. Do NOT split a conditional into separate
+  facts. Keep the full conditional as ONE quality.
+  Example: "There is no entitlement to inspection if the examination
+  was graded 1.0."
+- Start with the most important, high-level qualities for each chunk.
+- Ignore meta-information (headings, boilerplate, citations, references).
+- Avoid vague phrases ("this thing", "it", "that process").
+- Avoid quotation marks inside qualities.
+- Return at most $max_qualities_per_chunk qualities per chunk.
+
+Examples: $examples_json
+
+Now extract qualities for each chunk in this JSON input:
+$chunks_json
+\end{lstlisting}
+
+% ----------------------------------------------------------
+\subsection{Stage 4 — LLM Novelty Classification (batch)}
+\label{app:prompt-novelty-batch}
+
+Used by Stage~4 to classify each quality sentence as
+\textsc{existing}, \textsc{partially\_new}, or \textsc{new} relative
+to its retrieved KG neighbours, in a single batched call.
+
+\begin{lstlisting}[language={},breaklines=true,caption={}]
+You are a careful knowledge-graph curator.
+
+Your task: classify EACH candidate QUALITY sentence as one of:
+- EXISTING: conveys no meaningful new semantic content compared to the
+  neighbors.
+- PARTIALLY_NEW: overlaps strongly with neighbors but adds at least one
+  meaningful new detail, qualifier, scope, condition, or additional
+  concept that would improve the Knowledge Graph.
+- NEW: mostly not covered by the neighbors; introduces a new claim,
+  relation, or aspect not present in the neighbors.
+
+You will be given a JSON object with:
+{
+  "items": [
+    {
+      "id": <int>,
+      "quality": <string>,
+      "neighbors": [{"score": <float>, "sentence": <string>}, ...]
+    },
+    ...
+  ]
+}
+
+Important guidelines:
+1. Do NOT require exact lexical match. Judge semantic equivalence.
+2. Prefer PARTIALLY_NEW when the QUALITY contains extra specifics not
+   in the best neighbor: extra concept/entity, extra condition/trigger,
+   extra scope, extra modality/strength, or extra relation type.
+3. Prefer EXISTING when QUALITY is effectively a rephrase of the
+   closest neighbor and adds no new constraints or concepts.
+4. Use similarity scores as a weak signal:
+   - max_score >= 0.90 and meaning already captured -> EXISTING likely
+   - max_score medium/high but QUALITY adds a new detail -> PARTIALLY_NEW
+   - max_score low/medium and content not covered -> NEW
+   Scores are not decisive; content is decisive.
+
+Output MUST be valid JSON:
+{
+  "results": [
+    {
+      "id": <int>,
+      "decision": "EXISTING" | "PARTIALLY_NEW" | "NEW",
+      "rationale": "string",
+      "novel_spans": ["string", ...],
+      "matched_neighbor_sentence": "string | null",
+      "confidence": 0.0-1.0
+    },
+    ...
+  ]
+}
+
+Hard requirements:
+- Output strict JSON only. No markdown.
+- Exactly one result entry per input item id.
+- "novel_spans": phrases from QUALITY representing new semantic
+  contribution (empty for EXISTING).
+- "matched_neighbor_sentence": closest neighbor in meaning, or null.
+
+Few-shot examples: $examples_json
+
+Now classify these items:
+$items_json
+\end{lstlisting}
+
+% ----------------------------------------------------------
+\subsection{Stage 5 — Controlled-Vocabulary Triplet Extraction (batch)}
+\label{app:prompt-triplets-batch}
+
+Used by Stage~5 to extract \textsc{(Subject, Object, Predicate)}
+triplets with deontic modality from a batch of quality sentences,
+constrained to the declared predicate vocabulary.
+
+\begin{lstlisting}[language={},breaklines=true,caption={}]
+You are an information extraction system. Extract meaningful semantic
+relationships from each sentence so they can be reviewed and inserted
+into a Knowledge Graph.
+
+Each relationship MUST be a triplet in the exact order:
+(Subject, Object, Predicate)
+
+The Predicate value is ontology-controlled. You MUST use only exact
+values from this allowed predicate list: $predicates_json
+
+Rules for Predicate selection:
+- Copy the Predicate string exactly. Do not lowercase, add spaces, or
+  invent variants.
+- If no allowed Predicate accurately represents a sentence, return an
+  empty triplets array and provide a short skipped_reason.
+- Do not force-fit a sentence into a Predicate. Do not hallucinate.
+- If multiple Predicates could fit, prefer the earliest in the list.
+
+Normative language (standards documents):
+- Prefer normative Predicates for obligations, recommendations,
+  permissions, prohibitions, or definitions:
+  Requires, Recommends, Permits, Prohibits, Defines.
+- Classify each sentence's deontic modality:
+  "shall" / "must"         -> "MANDATORY"
+  "should"                 -> "RECOMMENDED"
+  "may" / "can"            -> "OPTIONAL"
+  "shall not" / "must not" -> "PROHIBITED"
+  no normative wording     -> "NONE"
+- For compound normative sentences, emit a SEPARATE triplet per
+  distinct claim. Report the STRONGEST modality for the sentence-level
+  field (priority: PROHIBITED > MANDATORY > RECOMMENDED > OPTIONAL).
+
+Standard schema guidance:
+- Subject and Object MUST come from the source sentence. Do not replace
+  source terms with schema canonical node names.
+- Use schema_templates and predicate_hints only to choose a Predicate
+  and role pattern, not to rename entities.
+
+You will receive a JSON array of objects, each with:
+  - "id": integer
+  - "sentence": string
+  - "standard_schema": optional object with extracted_entities,
+    inferred_node_types, predicate_hints, schema_templates,
+    and grounding_confidence
+
+You MUST respond with:
+{
+  "triplets_batch": [
+    {
+      "id": <int>,
+      "sentence": <string>,
+      "triplets": [[<Subject>, <Object>, <Predicate>], ...],
+      "modality": <"MANDATORY"|"RECOMMENDED"|"OPTIONAL"|"PROHIBITED"|"NONE">,
+      "skipped_reason": <string | null>
+    },
+    ...
+  ]
+}
+
+Hard requirements:
+- Output strict JSON only. No markdown, no prose outside JSON.
+- Exactly one entry per input id.
+- Each triplet: exactly three strings in order Subject, Object, Predicate.
+- Every Predicate must be from the allowed list.
+- If no valid triplets: "triplets": [] and set skipped_reason.
+
+Normalization (Subject and Object):
+- Remove leading articles ("a", "an", "the").
+- Prefer singular nouns when meaning is preserved.
+- Short, specific noun phrases; normal casing for common nouns,
+  preserved capitalisation for proper names and acronyms.
+- Never use "There", "It", "This", or "That" as Subject or Object.
+
+Examples: $examples_json
+
+Now process this input:
+$payload_json
+\end{lstlisting}
+
+% ----------------------------------------------------------
+\subsection{Stage 6 — Conflict \& Tension Judge}
+\label{app:prompt-conflict-judge}
+
+Used by the comparison engine to adjudicate candidate inter-standard
+conflicts, classifying each as \textsc{agree}, \textsc{unrelated},
+\textsc{tension}, or \textsc{contradict}.
+
+\begin{lstlisting}[language={},breaklines=true,caption={}]
+You are an expert reviewer of AI standards and guidelines (ISO/IEC,
+Fraunhofer, EU AI Act and similar). You compare pairs of statements
+extracted from different documents and judge whether they agree or
+pull against each other.
+
+You will receive a JSON array of candidate pairs. Each candidate has:
+  - "id": string identifier (copy it back unchanged)
+  - "type": structural signal (MODALITY_CONFLICT, DEFINITION_DIVERGENCE,
+    TAXONOMY_CONFLICT, VALUE_CONFLICT)
+  - "side_a": {"doc": document name, "text": verbatim statement,
+    "modality": optional obligation strength}
+  - "side_b": same structure for the other document
+
+For each candidate, decide ONE verdict:
+- "AGREE": both statements express compatible or mutually reinforcing
+  positions.
+- "UNRELATED": the statements talk about different things; the
+  structural signal is coincidental.
+- "TENSION": the statements diverge in strength, scope, or framing
+  without directly contradicting each other (e.g., one mandates what
+  the other merely recommends; definitions emphasise different aspects).
+- "CONTRADICT": the statements cannot both be satisfied at the same time.
+
+Rules:
+- Judge ONLY from the provided texts. Do not invent context.
+- Standards rarely contradict outright; prefer TENSION over CONTRADICT
+  unless the texts are truly incompatible.
+- The rationale must be ONE sentence, naming both documents, written
+  for a human reviewer.
+
+You MUST respond with:
+{
+  "verdicts": [
+    {"id": <string>, "verdict": <verdict>, "rationale": <string>},
+    ...
+  ]
+}
+
+Hard requirements:
+- Output strict JSON only. No markdown.
+- Exactly one verdict per input candidate with the original id.
+
+Now judge these candidates:
+$candidates_json
+\end{lstlisting}
+
+% ----------------------------------------------------------
+\subsection{Stage 2b — Keyword Synonym Expansion}
+\label{app:prompt-synonyms}
+
+Used by Stage~2b to expand a user-supplied focus keyword into up to
+ten synonyms for the KeyBERT relevance gate.
+
+\begin{lstlisting}[language={},breaklines=true,caption={}]
+Return only strict JSON. Do not explain or reason.
+
+Generate up to 10 close synonyms, alternatives, and natural
+morphological variants for this search keyword. These terms will be
+used for keyword expansion in a semantic search filter.
+
+Required JSON shape:
+{"synonyms": ["...", "...", ...]}
+
+Rules:
+- Keep the list to a maximum of 10 elements.
+- Include close morphological or derivational variants when
+  natural/common.
+- Do not include broad unrelated concepts.
+- Output JSON only.
+
+Search keyword:
+$keyword
+\end{lstlisting}
+
+% ────────────────────────────────────────────────────────────
+\section{Predicate Vocabulary}
+\label{app:predicates}
+
+Table~\ref{tab:predicates} lists the complete controlled predicate
+vocabulary used in Stage~5 triplet extraction, organised by the four
+ontology families.  Every predicate extracted by the LLM must be an
+exact string match against this list; off-vocabulary predicates are
+tagged \texttt{Needs schema review} and held for human override.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Controlled predicate vocabulary (Stage~5).}
+\label{tab:predicates}
+\begin{tabular}{ll}
+\toprule
+\textbf{Family} & \textbf{Predicates} \\
+\midrule
+Normative
+  & \texttt{Requires}, \texttt{Recommends}, \texttt{Permits},\\
+  & \texttt{Prohibits}, \texttt{Defines}, \texttt{Provides},\\
+  & \texttt{AppliesTo}, \texttt{Constrains}, \texttt{Measures} \\[4pt]
+Trustworthy AI
+  & \texttt{IsDimensionOf}, \texttt{ContributesTo},\\
+  & \texttt{MightMitigate}, \texttt{MightIntroduce},\\
+  & \texttt{SurfacesRisk}, \texttt{IsThreatTo} \\[4pt]
+Data Science
+  & \texttt{Implements}, \texttt{HasParameter}, \texttt{HasInput},\\
+  & \texttt{HasOutput}, \texttt{Evaluates}, \texttt{Performs} \\[4pt]
+Taxonomy
+  & \texttt{IsSubclassOf}, \texttt{IsEquivalentTo}, \texttt{IsA} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ────────────────────────────────────────────────────────────
+\section{Five-Strategy Verifier Specification}
+\label{app:verifier}
+
+Table~\ref{tab:verifier} gives the pass/fail thresholds and checking
+logic for each of the five post-upsert verification strategies
+(Stage~8).  Each strategy runs in an isolated exception handler so a
+single failure degrades to a per-strategy verdict rather than aborting
+the full audit.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Stage~8 verification strategy specifications.}
+\label{tab:verifier}
+\begin{tabularx}{\columnwidth}{llX}
+\toprule
+\textbf{ID} & \textbf{Threshold} & \textbf{Check} \\
+\midrule
+S1 Coverage      & $\tau \geq 0.90$ & $\geq$90\% of source quality sentences are reflected in at least one triple, verified via provenance record matching. \\[4pt]
+S2 Correctness   & $\tau = 1.0$     & All nodes have non-placeholder names; all edges use a predicate from the declared vocabulary. \\[4pt]
+S3 Consistency   & $\tau = 1.0$     & No $(S, O)$ pair is simultaneously linked by both an affirmative predicate (\texttt{Requires}, \texttt{Recommends}, \texttt{Permits}) and a prohibitive one (\texttt{Prohibits}). \\[4pt]
+S4 Completeness  & $\tau = 1.0$     & Every triple has a non-empty subject, object, and predicate, and at least one provenance record. \\[4pt]
+S5 Minimality    & $\tau = 1.0$     & No duplicate $(S, P, O)$ edge exists in the graph. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ────────────────────────────────────────────────────────────
+\section{Pre-Merge KB Preview Categories}
+\label{app:preview-categories}
+
+Before any graph write, each proposed triple is assigned one of five
+pre-merge categories (Stage~6a):
+
+\begin{description}
+  \item[\textsc{new}] The $(S, P, O)$ combination is not yet in the
+    graph.  Concepts may already exist as nodes, but the relation is new.
+  \item[\textsc{existing}] An identical or equivalent triple is already
+    present with the same predicate and compatible deontic modality.
+  \item[\textsc{tension}] The same $(S, P, O)$ exists but with a
+    different obligation strength (e.g.\ this document says
+    \textsc{mandatory}, the graph says \textsc{recommended}).
+  \item[\textsc{conflict}] The same subject–object pair is already linked
+    by a directly contradicting predicate (e.g.\ \texttt{Requires}
+    vs.\ \texttt{Prohibits}).
+  \item[\textsc{related}] The same concept pair appears in the graph but
+    via a different, non-contradicting predicate.
+\end{description}
+
+\textsc{conflict} and \textsc{tension} items are sorted to the top of
+the review queue.  Confirmed conflicts are materialised as
+\texttt{:Conflict} nodes in the graph for downstream compliance
+reasoning.
+
+% ────────────────────────────────────────────────────────────
+\section{Comparison Engine: Conflict Type Definitions}
+\label{app:conflict-types}
+
+The multi-document comparison engine detects four structural conflict
+types before invoking the LLM judge (Appendix~\ref{app:prompt-conflict-judge}):
+
+\begin{description}
+  \item[Obligation conflict] The same $(S, P, O)$ triple appears with
+    different deontic modalities across two documents
+    (e.g.\ \textsc{mandatory} in one, \textsc{recommended} in another).
+  \item[Definition divergence] The same concept is the target of a
+    \texttt{Defines} edge in two documents, but the defining sentences
+    differ semantically above a configurable threshold.
+  \item[Taxonomy conflict] A subsumption reversal: document~A asserts
+    $X$ \texttt{IsSubclassOf} $Y$ while document~B asserts $Y$
+    \texttt{IsSubclassOf} $X$.
+  \item[Value conflict] The same $(S, P, \cdot)$ pattern appears in
+    both documents but with different object values for a
+    value-bearing predicate.
+\end{description}
+
+% ────────────────────────────────────────────────────────────
+\section{Few-Shot Example Counts per Prompt}
+\label{app:fewshot-counts}
+
+Each prompt template is injected with a fixed set of hand-authored
+few-shot examples at runtime.  Table~\ref{tab:fewshot} documents the
+example counts.  All examples are domain-agnostic (not drawn from the
+EU AI Act, ISO/IEC~42001, or ISO/IEC~5259-3 to avoid data leakage).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Few-shot example counts per prompt.}
+\label{tab:fewshot}
+\begin{tabular}{lc}
+\toprule
+\textbf{Prompt} & \textbf{Examples} \\
+\midrule
+Stage 2c — Atomic Decomposition (batch)       & 3 \\
+Stage 4  — Novelty Classification (batch)     & 4 \\
+Stage 5  — Triplet Extraction (batch)         & 4 \\
+Stage 5  — Triplet Extraction (neutral/MINE)  & 3 \\
+Stage 2b — Keyword Synonym Expansion          & 0 \\
+Stage 6  — Conflict Judge                     & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}

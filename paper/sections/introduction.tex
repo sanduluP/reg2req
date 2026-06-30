@@ -1,0 +1,41 @@
+\section{Introduction}
+
+The legal operationalization of AI governance has become one of the most pressing engineering challenges in applied AI. Regulations such as the EU AI Act~\citep{euAIAct2024}, ISO/IEC 42001~\citep{iso42001}, and ISO/IEC 5259-3~\citep{iso52593} each define obligations for AI systems across dimensions including transparency, fairness, robustness, privacy, and human oversight. Yet these standards are written in normative natural language — using hedged modal constructions (\emph{shall}, \emph{should}, \emph{may}) and referencing concepts they seldom formally define — making it exceptionally difficult for engineers and compliance teams to derive concrete, actionable requirements.
+
+The challenge is compounded by scale: a compliance review team working across three co-regulating standards faces thousands of normative assertions, many of which nominally address the same concept (e.g., \emph{data quality}, \emph{transparency mechanism}) but with differing obligation strengths, subtly conflicting scopes, or mutually inconsistent definitions. Manual cross-reading cannot sustain this at scale, and the growing body of Trustworthy AI regulation makes the problem structurally worse over time.
+
+Existing NLP and knowledge engineering approaches fall short in three ways. First, text-to-graph extractors such as KGGen~\citep{mo2025kggen}, GraphRAG~\citep{edge2024graphrag}, and OpenIE-based systems extract triples from individual documents without conditioning extraction on what is already known — every run re-derives the same facts and lacks a deduplication model. Second, regulatory NLP tools~\citep{abualhaija2025llm,guliani2026jure} focus on obligation detection or deontic classification within a single document but do not integrate extracted knowledge into a growing, queryable graph. Third, none of these approaches tracks deontic modality at the triple level, making it impossible to detect a central class of inter-standard conflict: one standard mandating what another merely recommends for the same claim.
+
+We address these gaps with a seven-stage human-in-the-loop pipeline that treats incremental knowledge graph construction as a first-class design concern. The pipeline conditions each extraction step on the current graph state, classifies new information by novelty relative to existing knowledge, records deontic obligation strength per triple, and exposes cross-document conflicts and coverage gaps through a structured comparison engine. The system is evaluated both quantitatively on the MINE-1 knowledge retention benchmark and qualitatively through multi-standard analysis of three Trustworthy AI regulatory documents.
+
+\medskip
+\noindent This paper is organized around four research questions:
+
+\begin{enumerate}
+
+    \item[\textbf{RQ1}] \emph{Extraction quality:} Does a graph-conditioned, atomic-decomposition pipeline achieve reliably higher knowledge retention from regulatory text than existing text-to-graph extractors — and is the improvement robust to the choice of evaluation judge? Without faithful fact capture, no downstream compliance analysis can be trusted; this question establishes whether the pipeline's architectural choices yield measurable gains over the state of the art.
+
+    \item[\textbf{RQ2}] \emph{Obligation conflict detection:} Do co-regulating Trustworthy AI standards impose structurally inconsistent deontic obligations on the same concepts, and can triple-level modality tracking surface these conflicts automatically? A compliance team applying one standard may unknowingly accept a weaker obligation that another standard mandates at the strictest level — a class of risk that is structurally invisible without per-triple modality annotation.
+
+    \item[\textbf{RQ3}] \emph{Normative gap exposure:} At what scale do Trustworthy AI standards impose obligations on concepts they never formally define, and does structured KG extraction surface these under-specified obligations more reliably than document-level reading? Undefined obligated concepts are compliance dead-ends: engineers cannot implement requirements that the standard itself leaves unspecified, and the scale of this problem is unknown without systematic extraction.
+
+    \item[\textbf{RQ4}] \emph{Cross-standard concept coverage:} Are co-regulating Trustworthy AI standards largely redundant, or does each make exclusive conceptual contributions — and what does asymmetric coverage reveal about the risks of single-standard compliance? If the majority of concepts appear in only one standard, a compliance team reviewing a single document will miss obligations that co-regulating standards impose on the same system.
+
+\end{enumerate}
+
+\medskip
+\noindent This paper makes the following contributions:
+
+\begin{enumerate}
+
+    \item A seven-stage human-in-the-loop pipeline for incremental, graph-conditioned extraction of regulatory knowledge from Trustworthy AI standards, with deontic modality tracking per triple and append-only cross-document provenance.
+
+    \item A novelty-aware classification mechanism (EXISTING / PARTIALLY\_NEW / NEW) that conditions LLM extraction on the current knowledge graph state, reducing redundancy and improving the semantic density of extracted knowledge.
+
+    \item A multi-document comparison engine that detects four classes of inter-standard conflict (obligation, definition, taxonomy, value), surfaces normative gaps (obligations on undefined concepts), and produces per-dimension coverage matrices across standards.
+
+    \item A pre-merge KB preview and five-strategy post-upsert verifier (Coverage, Correctness, Consistency, Completeness, Minimality) that close the quality loop — detecting extraction errors that survive human review before the graph is used for compliance reasoning.
+
+    \item An empirical evaluation on the MINE-1 benchmark demonstrating a +16.7~point knowledge retention improvement over KGGen, and a qualitative multi-standard analysis of the EU AI Act, ISO/IEC 42001, and ISO/IEC 5259-3.
+
+\end{enumerate}

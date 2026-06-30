@@ -1,0 +1,9 @@
+\section{Conclusion}
+
+We presented KBDebugger, a seven-stage human-in-the-loop pipeline for constructing deontic-modality-aware knowledge graphs from Trustworthy AI regulatory standards. The system advances text-to-KG extraction in three directions: graph-conditioned novelty filtering prevents re-extraction of existing knowledge; controlled-vocabulary, modality-tagged triplet extraction preserves obligation semantics; and a multi-document comparison engine surfaces obligation conflicts, normative gaps, and coverage asymmetries that are invisible to single-document approaches.
+
+On MINE-1, KBDebugger achieves 79.4\% knowledge retention — a 16.7-point improvement over KGGen — robust across three independent LLM judges. Applied to EU AI Act Article 10, ISO/IEC 42001, and ISO/IEC 5259-3, the system automatically detected 41 inter-standard conflicts (56\% of which are obligation-level modality mismatches), 47 normative gaps (concepts obligated but never defined), and a coverage structure where 58\% of extracted concepts are addressed by only one standard — findings that would require prohibitive manual effort to establish without structured extraction.
+
+The central limitation of this work is that RQ3 evaluation (human oversight contribution) is based on a single development team's review sessions; a broader annotation study with multiple independent reviewers is needed to generalize the failure-mode analysis. Additionally, the controlled predicate vocabulary is designed for AI governance documents and would require adaptation for other regulatory domains.
+
+Future work will investigate automated conflict resolution proposals — using the extracted KG structure to suggest canonical obligation levels when standards disagree — and will extend the comparison engine to track provenance at the sentence-fragment level, enabling finer-grained attribution in conflict reports.

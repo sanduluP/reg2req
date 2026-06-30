@@ -1,0 +1,379 @@
+\begin{thebibliography}{55}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{Abualhaija et~al.(2025)Abualhaija, Ceci, Sannier, Bianculli, Lannier,
+  Siclari, Voordeckers, and Tosza}]{abualhaija2025llm}
+Abualhaija, S.; Ceci, M.; Sannier, N.; Bianculli, D.; Lannier, S.; Siclari, M.;
+  Voordeckers, O.; and Tosza, S. 2025.
+\newblock {LLM}-Assisted Extraction of Regulatory Requirements: A Case Study on
+  the {GDPR}.
+\newblock In \emph{2025 IEEE 33rd International Requirements Engineering
+  Conference (RE)}, 142--154. IEEE.
+
+\bibitem[{Akasiadis et~al.(2025)Akasiadis, Mitzias, Meditskos, and
+  Kompatsiaris}]{akasiadis2025inconsistency}
+Akasiadis, C.; Mitzias, P.; Meditskos, G.; and Kompatsiaris, I. 2025.
+\newblock Detecting and Fixing Inconsistencies in Large Knowledge Graphs.
+\newblock \emph{Scientific Data}, 12: 1--14.
+
+\bibitem[{Amaral et~al.(2023)Amaral, Azeem, Abualhaija, and
+  Briand}]{amaral2023gdpr}
+Amaral, G.; Azeem, M.~I.; Abualhaija, S.; and Briand, L.~C. 2023.
+\newblock {NLP}-based Automated Compliance Checking of Data Processing
+  Agreements against {GDPR}.
+\newblock \emph{IEEE Transactions on Software Engineering}, 49(11): 4681--4706.
+
+\bibitem[{Ariai and Demartini(2024)}]{ariai2024legalnlp}
+Ariai, F.; and Demartini, G. 2024.
+\newblock Natural Language Processing for the Legal Domain: A Survey of Tasks,
+  Datasets, Models, and Challenges.
+\newblock \emph{ACM Computing Surveys}, 57(3): 1--46.
+
+\bibitem[{Arora, Grundy, and Abdelrazek(2024)}]{anon2024reqcontra}
+Arora, C.; Grundy, J.; and Abdelrazek, M. 2024.
+\newblock Automated Requirement Contradiction Detection through Formal Logic
+  and {LLMs}.
+\newblock volume~31, 23.
+
+\bibitem[{Banko et~al.(2007)Banko, Cafarella, Soderland, Broadhead, and
+  Etzioni}]{banko2007open}
+Banko, M.; Cafarella, M.~J.; Soderland, S.; Broadhead, M.; and Etzioni, O.
+  2007.
+\newblock Open Information Extraction from the Web.
+\newblock In \emph{Proceedings of the 20th International Joint Conference on
+  Artificial Intelligence}, 2670--2676.
+
+\bibitem[{Bassignana and Plank(2022)}]{bassignana2022crossre}
+Bassignana, E.; and Plank, B. 2022.
+\newblock {CrossRE}: A Cross-Domain Dataset for Relation Extraction.
+\newblock In \emph{Findings of the Association for Computational Linguistics:
+  {EMNLP} 2022}, 3592--3604.
+
+\bibitem[{Bikaun, Stewart, and Liu(2024)}]{bikaun2024cleangraph}
+Bikaun, T.; Stewart, M.; and Liu, W. 2024.
+\newblock {CleanGraph}: Human-in-the-Loop Knowledge Graph Refinement and
+  Completion.
+\newblock arXiv:2405.03932.
+
+\bibitem[{Chalkidis et~al.(2020)Chalkidis, Fergadiotis, Malakasiotis, Aletras,
+  and Androutsopoulos}]{chalkidis2020legalbert}
+Chalkidis, I.; Fergadiotis, M.; Malakasiotis, P.; Aletras, N.; and
+  Androutsopoulos, I. 2020.
+\newblock {LEGAL-BERT}: The Muppets Straight Out of Law School.
+\newblock In \emph{Findings of the Association for Computational Linguistics:
+  {EMNLP} 2020}, 2898--2904.
+
+\bibitem[{Chen et~al.(2022)Chen, Ji, Zheng, Zheng, Li, and
+  Hou}]{chen2022openworld}
+Chen, H.; Ji, S.; Zheng, H.; Zheng, Z.; Li, J.; and Hou, L. 2022.
+\newblock Rethinking Knowledge Graph Evaluation Under the Open-World
+  Assumption.
+\newblock \emph{arXiv preprint arXiv:2209.08858}.
+
+\bibitem[{Colombo, Rognone, and Palmirani(2025)}]{icail2025obligation}
+Colombo, D.; Rognone, L.; and Palmirani, M. 2025.
+\newblock Lost in {EU} Regulation? Don't Worry, {AI} Found the Obligation.
+\newblock In \emph{Proceedings of the 20th International Conference on
+  Artificial Intelligence and Law (ICAIL 2025)}.
+
+\bibitem[{Devlin et~al.(2019)Devlin, Chang, Lee, and
+  Toutanova}]{devlin2019bert}
+Devlin, J.; Chang, M.-W.; Lee, K.; and Toutanova, K. 2019.
+\newblock {BERT}: Pre-training of Deep Bidirectional Transformers for Language
+  Understanding.
+\newblock In \emph{Proceedings of the 2019 Conference of the North {A}merican
+  Chapter of the Association for Computational Linguistics}, 4171--4186.
+
+\bibitem[{Dibowski(2024)}]{dibowski2024provenance}
+Dibowski, H. 2024.
+\newblock Full Traceability and Provenance for Knowledge Graphs.
+\newblock In \emph{Proceedings of the 14th International Conference on Formal
+  Ontology in Information Systems (FOIS 2024)}, 223--237. IOS Press.
+
+\bibitem[{Dragoni et~al.(2019)Dragoni, Villata, Rizzi, and
+  Governatori}]{dragoni2019combining}
+Dragoni, M.; Villata, S.; Rizzi, W.; and Governatori, G. 2019.
+\newblock Combining Natural Language Processing Approaches for Rule Extraction
+  from Legal Documents.
+\newblock In \emph{Proceedings of the International Workshop on AI Approaches
+  to the Complexity of Legal Systems}, 287--300. Springer.
+
+\bibitem[{{DS4SD Team}(2024)}]{docling2024}
+{DS4SD Team}. 2024.
+\newblock Docling: An Efficient Open-Source Toolkit for {AI}-Driven Document
+  Conversion.
+\newblock arXiv:2408.09869.
+
+\bibitem[{Edge et~al.(2024)Edge, Trinh, Cheng, Bradley, Chao, Mody, Truitt, and
+  Larson}]{edge2024graphrag}
+Edge, D.; Trinh, H.; Cheng, N.; Bradley, J.; Chao, A.; Mody, A.; Truitt, S.;
+  and Larson, J. 2024.
+\newblock From Local to Global: A Graph {RAG} Approach to Query-Focused
+  Summarization.
+\newblock \emph{arXiv preprint arXiv:2404.16130}.
+
+\bibitem[{Ershov, Mitra, and Tiwari(2023)}]{ershov2023compliance}
+Ershov, V.; Mitra, T.; and Tiwari, S. 2023.
+\newblock A Case Study for Compliance as Code with Graphs and Language Models:
+  Public Release of the Regulatory Knowledge Graph.
+\newblock arXiv:2302.01842.
+
+\bibitem[{{European Parliament and Council of the European
+  Union}(2024)}]{euAIAct2024}
+{European Parliament and Council of the European Union}. 2024.
+\newblock {Regulation (EU) 2024/1689 Laying Down Harmonised Rules on Artificial
+  Intelligence}.
+\newblock \url{https://eur-lex.europa.eu/eli/reg/2024/1689/oj}.
+
+\bibitem[{Feng et~al.(2024)Feng, Marsso, Yaman, Spoletini, and
+  Chechik}]{feng2024normative}
+Feng, N.; Marsso, L.; Yaman, S.~G.; Spoletini, P.; and Chechik, M. 2024.
+\newblock Normative Requirements Operationalization with Large Language Models.
+\newblock In \emph{Proceedings of the 32nd IEEE International Requirements
+  Engineering Conference (RE 2024)}, 1--12.
+
+\bibitem[{Grootendorst(2020)}]{grootendorst2020keybert}
+Grootendorst, M. 2020.
+\newblock {KeyBERT}: Minimal Keyword Extraction with {BERT}.
+\newblock \emph{Zenodo}.
+
+\bibitem[{Guha et~al.(2023)Guha, Nyarko, Ho, R{\'e}, Chilton, Chohlas-Wood,
+  Peters, Waldon, Rockmore, Zambrano et~al.}]{guha2023legalbench}
+Guha, N.; Nyarko, J.; Ho, D.~E.; R{\'e}, C.; Chilton, A.; Chohlas-Wood, A.;
+  Peters, A.; Waldon, B.; Rockmore, D.~N.; Zambrano, D.; et~al. 2023.
+\newblock {LegalBench}: A Collaboratively Built Benchmark for Measuring Legal
+  Reasoning in Large Language Models.
+\newblock In \emph{Advances in Neural Information Processing Systems},
+  volume~36.
+
+\bibitem[{Guliani et~al.(2026)Guliani, Gill, Landsman, Eshraghi, Kumar, and
+  Gondara}]{guliani2026jure}
+Guliani, K.; Gill, D.; Landsman, D.; Eshraghi, N.; Kumar, K.; and Gondara, L.
+  2026.
+\newblock De Jure: Iterative {LLM} Self-Refinement for Structured Extraction of
+  Regulatory Rules.
+\newblock \emph{arXiv preprint arXiv:2604.02276}.
+
+\bibitem[{Hagendorff(2020)}]{hagendorff2020ethics}
+Hagendorff, T. 2020.
+\newblock The Ethics of {AI} Ethics: An Evaluation of Guidelines.
+\newblock \emph{Minds and Machines}, 30(1): 99--120.
+
+\bibitem[{Huguet~Cabot and Navigli(2021)}]{huguetcabot2021rebel}
+Huguet~Cabot, P.-L.; and Navigli, R. 2021.
+\newblock {REBEL}: Relation Extraction By End-to-end Language Generation.
+\newblock In \emph{Findings of the Association for Computational Linguistics:
+  {EMNLP} 2021}, 2370--2381.
+
+\bibitem[{{International Organization for Standardization}(2023)}]{iso42001}
+{International Organization for Standardization}. 2023.
+\newblock {ISO/IEC 42001:2023 Information Technology---Artificial
+  Intelligence---Management System}.
+\newblock {International Standard},
+  \url{https://www.iso.org/standard/81230.html}.
+
+\bibitem[{{International Organization for Standardization}(2024)}]{iso52593}
+{International Organization for Standardization}. 2024.
+\newblock {ISO/IEC 5259-3: Data Quality for Analytics and Machine Learning (ML)
+  --- Part 3: Data Quality Management Requirements and Guidelines}.
+\newblock {International Standard},
+  \url{https://www.iso.org/standard/82010.html}.
+
+\bibitem[{Jobin, Ienca, and Vayena(2019)}]{jobin2019global}
+Jobin, A.; Ienca, M.; and Vayena, E. 2019.
+\newblock The Global Landscape of {AI} Ethics Guidelines.
+\newblock \emph{Nature Machine Intelligence}, 1(9): 389--399.
+
+\bibitem[{Koreeda and Manning(2021)}]{koreeda2021contractnli}
+Koreeda, Y.; and Manning, C.~D. 2021.
+\newblock {ContractNLI}: A Dataset for Document-level Natural Language
+  Inference for Contracts.
+\newblock In \emph{Findings of the Association for Computational Linguistics:
+  {EMNLP} 2021}, 1546--1562.
+
+\bibitem[{Laux, Wachter, and Mittelstadt(2022)}]{laux2022trustworthy}
+Laux, J.; Wachter, S.; and Mittelstadt, B. 2022.
+\newblock Trustworthy Artificial Intelligence and the {European Union AI Act}:
+  On the Conflation of Trustworthiness and Acceptability of Risk.
+\newblock \emph{Regulation \& Governance}, 17(3): 683--698.
+
+\bibitem[{Lebo et~al.(2013)Lebo, Sahoo, McGuinness, Belhajjame, Cheney, Corsar,
+  Garijo, Soiland-Reyes, Zednik, and Zhao}]{w3cprov2013}
+Lebo, T.; Sahoo, S.; McGuinness, D.; Belhajjame, K.; Cheney, J.; Corsar, D.;
+  Garijo, D.; Soiland-Reyes, S.; Zednik, S.; and Zhao, J. 2013.
+\newblock {PROV-O}: The {PROV} Ontology.
+\newblock {W3C Recommendation}, \url{https://www.w3.org/TR/prov-o/}.
+
+\bibitem[{Liasetsanagakis and Chalkidis(2023)}]{liasetsanagakis2023lowresource}
+Liasetsanagakis, I.; and Chalkidis, I. 2023.
+\newblock Low-Resource Deontic Modality Classification in {EU} Legislation.
+\newblock In \emph{Proceedings of the Natural Legal Language Processing
+  Workshop at EMNLP 2023}.
+
+\bibitem[{Mero{\~n}o-Pe{\~n}uela et~al.(2025)Mero{\~n}o-Pe{\~n}uela, Simperl,
+  Kurteva, and Reklos}]{merono2025kg}
+Mero{\~n}o-Pe{\~n}uela, A.; Simperl, E.; Kurteva, A.; and Reklos, I. 2025.
+\newblock {KG.gov}: Knowledge Graphs as the Backbone of Data Governance in
+  {AI}.
+\newblock \emph{Journal of Web Semantics}, 85: 100847.
+
+\bibitem[{Mittelstadt(2019)}]{mittelstadt2019principles}
+Mittelstadt, B. 2019.
+\newblock Principles Alone Cannot Guarantee Ethical {AI}.
+\newblock \emph{Nature Machine Intelligence}, 1(9): 501--507.
+
+\bibitem[{Mo et~al.(2025)Mo, Yu, Kazdan, Mpala, Yu, Cundy, Kanatsoulis, and
+  Koyejo}]{mo2025kggen}
+Mo, B.; Yu, K.; Kazdan, J.; Mpala, P.; Yu, L.; Cundy, C.; Kanatsoulis, C.; and
+  Koyejo, S. 2025.
+\newblock {KGGen}: Extracting Knowledge Graphs from Plain Text with Language
+  Models.
+\newblock arXiv:2502.09956.
+
+\bibitem[{Mosqueira-Rey et~al.(2023)Mosqueira-Rey, Hern{\'a}ndez-Pereira,
+  Alonso-R{\'i}os, Bobes-Basc{\'a}r{\'a}n, and
+  Fern{\'a}ndez-Leal}]{mosqueira2023hitl}
+Mosqueira-Rey, E.; Hern{\'a}ndez-Pereira, E.; Alonso-R{\'i}os, D.;
+  Bobes-Basc{\'a}r{\'a}n, J.; and Fern{\'a}ndez-Leal, {\'A}. 2023.
+\newblock Human-in-the-Loop Machine Learning: A State of the Art.
+\newblock \emph{Artificial Intelligence Review}, 56(4): 3005--3054.
+
+\bibitem[{Niklaus et~al.(2018)Niklaus, Cetto, Freitas, and
+  Handschuh}]{niklaus2018survey}
+Niklaus, C.; Cetto, M.; Freitas, A.; and Handschuh, S. 2018.
+\newblock A Survey on Open Information Extraction.
+\newblock In \emph{Proceedings of the 27th International Conference on
+  Computational Linguistics}, 190--204.
+
+\bibitem[{{Ontology Alignment Evaluation Initiative}(2024)}]{oaei2024}
+{Ontology Alignment Evaluation Initiative}. 2024.
+\newblock {OAEI} 2024 Campaign Results.
+\newblock \url{https://oaei.ontologymatching.org/2024/}.
+
+\bibitem[{Pan et~al.(2024)Pan, Luo, Wang, Chen, Wang, and Wu}]{pan2024unifying}
+Pan, S.; Luo, L.; Wang, Y.; Chen, C.; Wang, J.; and Wu, X. 2024.
+\newblock Unifying Large Language Models and Knowledge Graphs: A Roadmap.
+\newblock \emph{IEEE Transactions on Knowledge and Data Engineering}, 36(7):
+  3580--3599.
+
+\bibitem[{Reimers and Gurevych(2019)}]{reimers2019sentencebert}
+Reimers, N.; and Gurevych, I. 2019.
+\newblock Sentence-{BERT}: Sentence Embeddings using Siamese {BERT}-Networks.
+\newblock In \emph{Proceedings of the 2019 Conference on Empirical Methods in
+  Natural Language Processing}, 3982--3992.
+
+\bibitem[{Sakketou, Chalkidis, and Roussinov(2022)}]{sakketou2022deontic}
+Sakketou, F.; Chalkidis, I.; and Roussinov, D. 2022.
+\newblock Agent-Specific Deontic Modality Detection in Legal Language.
+\newblock \emph{arXiv preprint arXiv:2211.12752}.
+
+\bibitem[{Sleimi et~al.(2018)Sleimi, Sannier, Sabetzadeh, Briand, and
+  Dann}]{sleimi2018semantic}
+Sleimi, A.; Sannier, N.; Sabetzadeh, M.; Briand, L.; and Dann, J. 2018.
+\newblock Automated Extraction of Semantic Legal Metadata from {EU}
+  Legislation.
+\newblock In \emph{Proceedings of the 26th {IEEE} International Requirements
+  Engineering Conference}, 282--293.
+
+\bibitem[{Tang et~al.(2022)Tang, Xu, Zhao, Zhu, Liu, Zhu, and
+  Tian}]{tang2022unirel}
+Tang, W.; Xu, B.; Zhao, Y.; Zhu, Z.; Liu, Y.; Zhu, Y.; and Tian, H. 2022.
+\newblock {UniRel}: Unified Representation and Interaction for Joint Relational
+  Triple Extraction.
+\newblock In \emph{Proceedings of the 2022 Conference on Empirical Methods in
+  Natural Language Processing}, 7087--7099.
+
+\bibitem[{Tang et~al.(2024)Tang, Shi, He, Gui, Zhang, and
+  Huang}]{tang2024collabkg}
+Tang, X.; Shi, Y.; He, Z.; Gui, T.; Zhang, Q.; and Huang, X. 2024.
+\newblock {CollabKG}: A Learnable Human-Machine-Cooperative Information
+  Extraction Toolkit for (Event) Knowledge Graph Construction.
+\newblock In \emph{Proceedings of the 2024 Joint International Conference on
+  Computational Linguistics, Language Resources and Evaluation (LREC-COLING
+  2024)}, 3408--3419.
+
+\bibitem[{Wadhwa, Amir, and Wallace(2023)}]{wadhwa2023re}
+Wadhwa, S.; Amir, S.; and Wallace, B.~C. 2023.
+\newblock Revisiting Relation Extraction in the era of Large Language Models.
+\newblock In \emph{Proceedings of the 61st Annual Meeting of the Association
+  for Computational Linguistics}, 15566--15589.
+
+\bibitem[{Wang et~al.(2024)Wang, Zhang, Liu, Guo, and Li}]{wang2024crossdoc}
+Wang, J.; Zhang, Y.; Liu, W.; Guo, L.; and Li, G. 2024.
+\newblock Knowledge-Driven Cross-Document Relation Extraction.
+\newblock In \emph{Findings of the Association for Computational Linguistics:
+  {ACL} 2024}, 9801--9815.
+
+\bibitem[{Wei et~al.(2022)Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le,
+  and Zhou}]{wei2022cot}
+Wei, J.; Wang, X.; Schuurmans, D.; Bosma, M.; Ichter, B.; Xia, F.; Chi, E.; Le,
+  Q.; and Zhou, D. 2022.
+\newblock Chain-of-Thought Prompting Elicits Reasoning in Large Language
+  Models.
+\newblock In \emph{Advances in Neural Information Processing Systems},
+  volume~35, 24824--24837.
+
+\bibitem[{Xu et~al.(2024)Xu, Chen, Peng, Zhang, Xu, Zhao, Wang, and
+  Chen}]{xu2024llmie}
+Xu, D.; Chen, W.; Peng, W.; Zhang, C.; Xu, T.; Zhao, X.; Wang, X.; and Chen, E.
+  2024.
+\newblock Large Language Models for Generative Information Extraction: A
+  Survey.
+\newblock \emph{Frontiers of Computer Science}, 18(6): 186357.
+
+\bibitem[{Xue and Zou(2023)}]{xue2023kgquality}
+Xue, B.; and Zou, L. 2023.
+\newblock Knowledge Graph Quality Management: A Comprehensive Survey.
+\newblock \emph{IEEE Transactions on Knowledge and Data Engineering}, 35(5):
+  4969--4988.
+
+\bibitem[{Yang, Kim, and Yoon(2026)}]{yang2026pasta}
+Yang, Y.; Kim, I.; and Yoon, D. 2026.
+\newblock {PASTA}: A Scalable Framework for Multi-Policy {AI} Compliance
+  Evaluation.
+\newblock arXiv:2601.11702.
+
+\bibitem[{Ye et~al.(2022)Ye, Lin, Li, and Sun}]{ye2022plmarker}
+Ye, D.; Lin, Y.; Li, P.; and Sun, M. 2022.
+\newblock Packed Levitated Marker for Entity and Relation Extraction.
+\newblock In \emph{Proceedings of the 60th Annual Meeting of the Association
+  for Computational Linguistics}, 4904--4917.
+
+\bibitem[{Zaveri et~al.(2016)Zaveri, Rula, Maurino, Pietrobon, Lehmann, and
+  Auer}]{zaveri2016quality}
+Zaveri, A.; Rula, A.; Maurino, A.; Pietrobon, R.; Lehmann, J.; and Auer, S.
+  2016.
+\newblock Quality Assessment for Linked Data: A Survey.
+\newblock \emph{Semantic Web}, 7(1): 63--93.
+
+\bibitem[{Zhang and Soh(2024)}]{zhang2024edc}
+Zhang, B.; and Soh, H. 2024.
+\newblock Extract, Define, Canonicalize: An {LLM}-Based Framework for Knowledge
+  Graph Construction.
+\newblock In \emph{Proceedings of the 2024 Conference on Empirical Methods in
+  Natural Language Processing}, 9794--9815.
+
+\bibitem[{Zhang et~al.(2019)Zhang, Han, Liu, Jiang, Sun, and
+  Liu}]{sun2019ernie}
+Zhang, Z.; Han, X.; Liu, Z.; Jiang, X.; Sun, M.; and Liu, Q. 2019.
+\newblock {ERNIE}: Enhanced Language Representation with Informative Entities.
+\newblock In \emph{Proceedings of the 57th Annual Meeting of the Association
+  for Computational Linguistics}, 1441--1451.
+
+\bibitem[{Zhong et~al.(2022)Zhong, Chen, Wang, Zeng, Li, and
+  Xiao}]{zhong2022openiesurvey}
+Zhong, Z.; Chen, J.; Wang, Z.; Zeng, Y.; Li, Y.; and Xiao, Y. 2022.
+\newblock A Survey on Neural Open Information Extraction: Current Status and
+  Future Directions.
+\newblock In \emph{Proceedings of the 31st International Joint Conference on
+  Artificial Intelligence}, 5694--5701.
+
+\bibitem[{Zhu et~al.(2024)Zhu, Wang, Chen, Qiao, Ou, Yao, Deng, Chen, and
+  Zhang}]{zhu2024llmkg}
+Zhu, Y.; Wang, X.; Chen, J.; Qiao, S.; Ou, Y.; Yao, Y.; Deng, S.; Chen, H.; and
+  Zhang, N. 2024.
+\newblock {LLMs} for Knowledge Graph Construction and Reasoning: Recent
+  Capabilities and Future Opportunities.
+\newblock \emph{World Wide Web}, 27(5): 58.
+
+\end{thebibliography}

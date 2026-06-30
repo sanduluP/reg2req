@@ -1,0 +1,140 @@
+\section{Background and Related Work}
+
+\subsection{Text-to-Knowledge Graph Extraction}
+
+Automated knowledge graph construction from text has evolved through three generations:
+rule-based OpenIE~\citep{banko2007open,niklaus2018survey}, neural entity-relation extraction~\citep{huguetcabot2021rebel,ye2022plmarker,tang2022unirel}, and, most recently, LLM-driven graph
+generation~\citep{zhu2024llmkg,pan2024unifying,zhang2024edc,xu2024llmie}.
+
+\citet{mo2025kggen} introduce KGGen alongside the MINE benchmark — the first quantitative
+benchmark for text-to-KG knowledge retention — and serve as our primary comparison point.
+\citet{edge2024graphrag} build community-level graphs for retrieval-augmented generation;
+their approach emphasizes global summarization rather than provenance fidelity.
+\citet{wadhwa2023re} demonstrate that GPT-class models already outperform fine-tuned
+specialist models on standard RE benchmarks, motivating KBDebugger's LLM-based
+extraction stages. \citet{zhang2024edc} propose the Extract-Define-Canonicalize framework,
+which parallels KBDebugger's controlled-vocabulary design and canonicalization step.
+A comprehensive survey of LLM-based generative IE~\citep{xu2024llmie} and a survey of
+neural OpenIE~\citep{zhong2022openiesurvey} situate KBDebugger within the broader landscape.
+
+\subsection{Regulatory and Legal NLP}
+
+Legal NLP has progressed from domain-adapted language models such as
+LEGAL-BERT~\citep{chalkidis2020legalbert} through structured compliance checkers and,
+most recently, to LLM-driven regulatory extraction.
+\citet{sleimi2018semantic} extract semantic legal metadata from EU legislation using
+dependency parsing and deontic keyword patterns, establishing a precedent for the
+structured normative extraction KBDebugger performs.
+\citet{dragoni2019combining} combine constituency parsing with ML classifiers to extract
+rules (obligations, permissions, prohibitions) from legal text — the same three-class
+deontic scheme KBDebugger's predicate vocabulary encodes as MANDATORY / RECOMMENDED /
+OPTIONAL / PROHIBITED.
+
+\textbf{Deontic modality detection.} Detecting modal obligation strength (\emph{shall},
+\emph{should}, \emph{may}) in legal text is a distinct NLP task. \citet{sakketou2022deontic}
+introduce a dataset annotated for agent-specific deontic modality in legislation;
+\citet{liasetsanagakis2023lowresource} evaluate LEGAL-BERT for deontic classification
+in EU legislation under low-resource conditions. Both establish baseline performance for
+the modality classification KBDebugger applies in Stage~5.
+
+\textbf{Automated compliance checking.} \citet{amaral2023gdpr} achieve 89.1\% precision
+extracting ``shall'' requirements from GDPR data processing agreements — the
+closest structural analogue to KBDebugger applied to a single standard.
+\citet{abualhaija2025llm} extend this to LLM-assisted GDPR requirement extraction.
+\citet{guliani2026jure} apply iterative LLM self-refinement for structured regulatory rule
+extraction. \citet{feng2024normative} operationalize normative requirements with LLMs at
+IEEE RE 2024, directly paralleling KBDebugger's Stage~5 triplet extraction with deontic labels.
+\citet{icail2025obligation} apply an NLP pipeline to obligations in the EU AI Act, DSA, and
+GDPR — the same regulatory corpus KBDebugger targets.
+
+A recent survey of legal NLP~\citep{ariai2024legalnlp} and the LegalBench
+benchmark~\citep{guha2023legalbench} (162 tasks measuring legal reasoning in LLMs) provide
+the evaluation landscape within which KBDebugger's extraction stages operate.
+ContractNLI~\citep{koreeda2021contractnli} demonstrates NLI as a tool for identifying
+obligations and entailments in legal contracts — directly relevant to KBDebugger's
+novelty classification step (Stages~3--4).
+
+\subsection{Trustworthy AI Standards and Operationalization}
+
+The landscape of Trustworthy AI governance is fragmented.
+\citet{jobin2019global} survey 84 AI ethics guidelines, finding convergence on five
+principles (transparency, fairness, accountability, privacy, robustness) but divergence on
+operationalization — exactly the gap KBDebugger's multi-standard comparison is designed to quantify.
+\citet{mittelstadt2019principles} argue that principles alone cannot guarantee ethical AI
+absent concrete technical mappings; \citet{hagendorff2020ethics} reach the same conclusion
+from an empirical evaluation of 22 guidelines. Together they motivate KBDebugger's normative
+gap detection: surfacing concepts standards oblige but never define.
+
+The EU AI Act~\citep{euAIAct2024} and ISO/IEC 42001~\citep{iso42001} represent the most
+binding instruments at present. \citet{laux2022trustworthy} analyse the EU AI Act's
+risk-based trustworthiness framework, noting the unresolved tension between legal
+acceptability and technical operationalizability. \citet{yang2026pasta} propose PASTA, a
+scalable multi-policy AI compliance evaluator using LLMs — the most comparable published
+system architecture to KBDebugger's comparison engine. \citet{ershov2023compliance}
+open-source a Neo4j-backed regulatory KG for Abu Dhabi financial regulations, demonstrating
+the same graph-plus-NLP pipeline design KBDebugger adopts for AI standards.
+
+\subsection{Human-in-the-Loop Knowledge Engineering}
+
+Human-in-the-loop (HITL) approaches consistently outperform fully automated KG pipelines
+on quality-sensitive tasks~\citep{mosqueira2023hitl}.
+\citet{bikaun2024cleangraph} present CleanGraph, an interactive CRUD tool for KG refinement
+and completion — the closest published system to KBDebugger's review interface, though
+CleanGraph operates on the graph directly rather than at the pre-upsert triplet level.
+\citet{tang2024collabkg} introduce CollabKG, a learnable human--machine cooperative IE tool
+with LLM pre-annotation and active self-renewal — the architecture most similar to
+KBDebugger's Stage~6 reviewer workflow, where LLM-proposed triplets are presented to experts
+for correction before any graph write. Neither system exposes pre-merge conflict previews or
+post-upsert verification.
+
+\subsection{Knowledge Graph Quality, Provenance, and Verification}
+
+KG quality management encompasses accuracy, consistency, completeness, timeliness, and
+provenance~\citep{xue2023kgquality,zaveri2016quality}.
+\citet{dibowski2024provenance} propose triple-level change tracking with full provenance for
+KGs, directly applicable to KBDebugger's append-only provenance model.
+The W3C PROV-O ontology~\citep{w3cprov2013} provides the interoperability standard for
+provenance graphs that KBDebugger's Neo4j data model aligns with.
+\citet{merono2025kg} argue that knowledge graphs should serve as the backbone of AI data
+governance — a proposition KBDebugger instantiates for regulatory compliance.
+
+For KG evaluation, \citet{chen2022openworld} demonstrate that standard link prediction
+metrics systematically underestimate KG quality under the open-world assumption —
+motivating KBDebugger's human-verified MINE evaluation rather than purely automated scoring.
+KBDebugger's five-strategy verifier (S1~Coverage, S2~Correctness, S3~Consistency,
+S4~Completeness, S5~Minimality) extends the quality dimensions identified in these surveys
+to a runtime, read-only verification pass on the live graph.
+
+\subsection{Multi-Document Analysis and Conflict Detection}
+
+Detecting inconsistencies across documents or knowledge bases requires both semantic
+alignment of shared concepts and logical comparison of their asserted properties.
+\citet{wang2024crossdoc} propose knowledge-guided cross-document relation extraction at
+ACL 2024 — directly paralleling KBDebugger's comparison engine, which must relate
+obligations from separate regulatory standards documents.
+\citet{bassignana2022crossre} introduce CrossRE, a cross-domain RE benchmark exposing
+generalization gaps, motivating KBDebugger's domain-specific predicate vocabulary for
+regulatory text.
+
+For legal-domain conflict detection, \citet{anon2024reqcontra} combine formal logic with
+LLMs to detect contradictions in requirements specifications — the same task KBDebugger's
+conflict detection stage performs at the knowledge-graph level.
+\citet{akasiadis2025inconsistency} address automated KG inconsistency detection and repair,
+confirming that graph-level conflict reasoning is tractable and practical.
+Ontology alignment methods from the OAEI~\citep{oaei2024} provide evaluation standards
+for the semantic alignment step in KBDebugger's comparison engine, where SAME\_AS pairs
+are proposed and reviewed before canonicalization.
+
+\subsection{Sentence Embeddings and Knowledge-Enhanced Representations}
+
+KBDebugger's similarity filtering (Stage~3) relies on sentence embeddings from
+Sentence-BERT~\citep{reimers2019sentencebert} (\texttt{all-MiniLM-L6-v2}), which produces
+dense representations suited to the short, label-style node names of ontology-style KGs.
+\citet{devlin2019bert} provide the pre-training foundation for all domain-adapted models
+used in the pipeline; \citet{sun2019ernie} demonstrate that integrating KG entity
+knowledge into LM pre-training improves factual recall — motivating KBDebugger's
+graph-conditioned approach where the existing KG guides novel extraction rather than
+operating independently.
+Chain-of-thought prompting~\citep{wei2022cot} is employed in KBDebugger's novelty
+classification and conflict judgment prompts to encourage step-by-step reasoning over
+regulatory clause comparisons.

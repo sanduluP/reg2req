@@ -1,0 +1,60 @@
+\documentclass[letterpaper]{article}
+\usepackage[submission]{aaai2027}
+\usepackage[hyphens]{url}
+\usepackage{graphicx}
+\urlstyle{rm}
+\def\UrlFont{\rm}
+\usepackage{natbib}
+\usepackage{caption}
+\frenchspacing
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{newfloat}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+
+\DeclareCaptionStyle{ruled}{labelfont=normalfont,labelsep=colon,strut=off}
+\lstset{%
+    basicstyle={\footnotesize\ttfamily},%
+    numbers=left,numberstyle=\footnotesize,xleftmargin=2em,%
+    aboveskip=0pt,belowskip=0pt,%
+    showstringspaces=false,tabsize=2,breaklines=true}
+\floatstyle{ruled}
+\newfloat{listing}{tb}{lst}{}
+\floatname{listing}{Listing}
+
+\pdfinfo{
+/TemplateVersion (2027.1)
+}
+
+\setcounter{secnumdepth}{2}
+
+\title{From Regulatory Text to Compliance Knowledge Graphs:\\
+Extraction, Conflict Detection, and Normative Gap Analysis\\
+Across Trustworthy AI Standards}
+
+\author{Anonymous Submission}
+\affiliations{}
+
+\begin{document}
+
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/methodology}
+\input{sections/evaluation}
+\input{sections/conclusion}
+
+\bibliography{references}
+
+\input{sections/appendix}
+
+\input{reproducibility_checklist}
+
+\end{document}

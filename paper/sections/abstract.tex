@@ -1,0 +1,17 @@
+\begin{abstract}
+Trustworthy AI regulations express normative obligations in natural language, making structured
+compliance reasoning across standards challenging. Existing approaches tend to process documents
+in isolation, accumulate duplicate facts, and rarely track obligation strength — limiting detection
+of conflicts where one standard mandates what another merely recommends.
+
+We introduce two mechanisms absent from prior work: \emph{graph-conditioned novelty
+classification} that conditions each step on the current KG, categorizing candidates as
+\textsc{partially\_new} or \textsc{new}; and \emph{per-triple deontic modality}, which makes
+obligation-strength conflicts detectable. Both are embedded in a seven-stage human-in-the-loop
+pipeline with a comparison engine, pre-merge preview, and post-upsert verification.
+
+On MINE-1, the system achieves \textbf{79.4\%} knowledge retention versus 62.7\% for KGGen
+(+16.7~points, robust across three LLM judges). Applied to EU AI Act Article~10, ISO/IEC~42001,
+and ISO/IEC~5259-3, it detects 41 inter-standard conflicts, 47 normative gaps (26\% of obligated
+concepts undefined), and finds 58\% of concepts are addressed by only one standard.
+\end{abstract}
