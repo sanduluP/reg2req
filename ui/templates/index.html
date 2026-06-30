@@ -75,17 +75,6 @@
                     <div class="step-hint">PDF · one or more files.</div>
                 </div>
 
-                <!-- Step 4 · Threshold shortcut -->
-                <div class="pipeline-step pipeline-tuning-link">
-                    <div class="step-label">&nbsp;</div>
-                    <button type="button" id="jump-to-thresholds"
-                        class="btn btn-outline-secondary btn-sm w-100"
-                        title="Open threshold tuning in the Review &amp; extract panel">
-                        <i class="bi bi-sliders2 me-1"></i>Tune thresholds
-                    </button>
-                    <div class="step-hint">Para · similarity · top-k · KG limit.</div>
-                </div>
-
                 <!-- Run -->
                 <div class="pipeline-step pipeline-actions">
                     <div class="step-label">&nbsp;</div>
@@ -340,17 +329,6 @@
                                     <div class="oversight-split-container">
                                         <div class="oversight-top d-flex flex-column" style="min-height:0;">
 
-                                            <!-- Human verification banner -->
-                                            <div id="oversight-verify-banner" class="alert alert-primary py-2 px-3 mb-2 d-flex align-items-center gap-2" role="alert" style="font-size:0.82rem;">
-                                                <i class="bi bi-person-check-fill fs-6"></i>
-                                                <div>
-                                                    <strong>Human verification.</strong>
-                                                    Tick only the quality lines you approve (use the checkboxes / select-all), or
-                                                    <i class="bi bi-trash"></i> delete the ones you don't want.
-                                                    <span class="fw-semibold">Only selected lines are sent to extraction and the KB.</span>
-                                                </div>
-                                            </div>
-
                                             <!-- Inner tabs -->
                                             <ul class="nav nav-tabs mb-2" id="oversight-inner-tabs" role="tablist">
                                                 <li class="nav-item" role="presentation">
@@ -383,7 +361,7 @@
                                             <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                                                 <div>
                                                     <div id="oversight-triplet-status" class="text-muted small">
-                                                        Triplet extraction: waiting for reviewed qualities.
+                                                        Triplet extraction: waiting for qualities.
                                                     </div>
                                                     <div id="oversight-quality-summary"
                                                         class="small d-none mt-1"></div>

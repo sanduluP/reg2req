@@ -132,140 +132,140 @@ export async function initKeywordDropdown({
   // Default: upload disabled until keyword chosen
   setHasKeywordSelected(false);
 
+  // ── Phase 1: Load keywords (blocking — dropdown can't work without them) ──
+  setLoading(true, {
+    title: "Loading focus areas…",
+    subtitle: "Populating the trustworthy-AI dimensions.",
+  });
+
+  let keywords;
   try {
-    setLoading(true, {
-      title: "Loading focus areas…",
-      subtitle: "Populating the trustworthy-AI dimensions.",
-    });
-
     const data = await getSearchKeywords();
-    const keywords = data.keywords || [];
-
-    // Build select options
-    select.innerHTML = "";
-
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Select a focus area…";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    select.appendChild(placeholder);
-
-    // Complete-scan option (all dimensions) — listed first for visibility.
-    const allOpt = document.createElement("option");
-    allOpt.value = ALL_DIMENSIONS;
-    allOpt.textContent = "🔍 Complete trustworthy-AI scan (all dimensions)";
-    select.appendChild(allOpt);
-
-    // Custom keyword(s) — user supplies their own focus terms.
-    const customOpt = document.createElement("option");
-    customOpt.value = CUSTOM_KEYWORD;
-    customOpt.textContent = "✏️ Custom keyword(s)…";
-    select.appendChild(customOpt);
-
-    // No keyword — whole-document extraction (text → graph).
-    const noneOpt = document.createElement("option");
-    noneOpt.value = NO_KEYWORD;
-    noneOpt.textContent = "📄 No keyword — whole document (text → graph)";
-    select.appendChild(noneOpt);
-
-    const dimGroup = document.createElement("optgroup");
-    dimGroup.label = "Single dimension";
-    for (const k of keywords) {
-      const opt = document.createElement("option");
-      opt.value = k;
-      opt.textContent = k;
-      dimGroup.appendChild(opt);
-    }
-    select.appendChild(dimGroup);
-
-    // IMPORTANT: no auto-selection, no auto-fetch.
-
-    const customInput = document.getElementById("custom-keyword-input");
-    const showCustomInput = (show) => {
-      if (customInput) customInput.classList.toggle("d-none", !show);
-    };
-
-    // Enable Run as the user types custom keyword(s).
-    if (customInput) {
-      customInput.addEventListener("input", () => {
-        if ((select.value || "").trim() === CUSTOM_KEYWORD) {
-          setHasKeywordSelected(customInput.value.trim().length > 0);
-        }
-      });
-    }
-
-    select.addEventListener("change", async () => {
-      const chosen = (select.value || "").trim();
-
-      // If somehow empty, keep upload disabled
-      if (!chosen) {
-        showCustomInput(false);
-        setHasKeywordSelected(false);
-        return;
-      }
-
-      // Custom keyword(s): reveal the text box; Run enables once it has text.
-      if (chosen === CUSTOM_KEYWORD) {
-        showCustomInput(true);
-        setHasKeywordSelected((customInput?.value || "").trim().length > 0);
-        if (customInput) customInput.focus();
-        return;
-      }
-
-      showCustomInput(false);
-
-      // No keyword: whole-document extraction. Nothing to filter, no subgraph to
-      // preview — just enable Run.
-      if (chosen === NO_KEYWORD) {
-        setHasKeywordSelected(true);
-        return;
-      }
-
-      // Complete scan: preview the WHOLE graph from Neo4j AND enable Run so the
-      // pipeline can extract across every dimension in one pass. Each quality is
-      // tagged with the dimension(s) it matches.
-      if (chosen === ALL_DIMENSIONS) {
-        setHasKeywordSelected(true);  // allow upload + Run for a complete scan
-        setLoading(true, {
-          title: "Loading full graph…",
-          subtitle: "Fetching all nodes and relationships from Neo4j.",
-        });
-        try {
-          await fetchAndRenderFullGraph(onSubgraphFetch);
-          switchToTopLevelTab({ tab: TopLevelTabs.GRAPH });
-        } finally {
-          setLoading(false);
-        }
-        return;
-      }
-
-      // Mark keyword as chosen (upload would become enabled once not loading)
-      setHasKeywordSelected(true);
-
-      setLoading(true, {
-        title: "Loading graph…",
-        subtitle: "If the database is waking up, this may take a moment.",
-      });
-
-      try {
-        await fetchAndRenderSubgraph(chosen, onSubgraphFetch);
-        switchToTopLevelTab({ tab: TopLevelTabs.GRAPH });
-      } finally {
-        setLoading(false);
-        // Upload will automatically be enabled because:
-        // hasKeywordSelected === true and isLoading === false
-      }
-    });
+    keywords = data.keywords || [];
   } catch (err) {
     console.error(err);
     select.innerHTML = `<option value="">❌ Failed to load focus areas</option>`;
     select.disabled = true;
-    setHasKeywordSelected(false);
-  } finally {
-    // Ensure spinner/overlay cleared
     setLoading(false);
+    return;
   }
+
+  // Build select options
+  select.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a focus area…";
+  placeholder.disabled = true;
+  select.appendChild(placeholder);
+
+  // Complete-scan option (all dimensions) — listed first for visibility, selected by default.
+  const allOpt = document.createElement("option");
+  allOpt.value = ALL_DIMENSIONS;
+  allOpt.textContent = "🔍 Complete trustworthy-AI scan (all dimensions)";
+  allOpt.selected = true;
+  select.appendChild(allOpt);
+
+  // Custom keyword(s) — user supplies their own focus terms.
+  const customOpt = document.createElement("option");
+  customOpt.value = CUSTOM_KEYWORD;
+  customOpt.textContent = "✏️ Custom keyword(s)…";
+  select.appendChild(customOpt);
+
+  // No keyword — whole-document extraction (text → graph).
+  const noneOpt = document.createElement("option");
+  noneOpt.value = NO_KEYWORD;
+  noneOpt.textContent = "📄 No keyword — whole document (text → graph)";
+  select.appendChild(noneOpt);
+
+  const dimGroup = document.createElement("optgroup");
+  dimGroup.label = "Single dimension";
+  for (const k of keywords) {
+    const opt = document.createElement("option");
+    opt.value = k;
+    opt.textContent = k;
+    dimGroup.appendChild(opt);
+  }
+  select.appendChild(dimGroup);
+
+  // Dropdown is ready — upload is unlocked (complete scan is selected by default).
+  setHasKeywordSelected(true);
+  setLoading(false);
+
+  // ── Phase 2: Event listeners ──
+  const customInput = document.getElementById("custom-keyword-input");
+  const showCustomInput = (show) => {
+    if (customInput) customInput.classList.toggle("d-none", !show);
+  };
+
+  if (customInput) {
+    customInput.addEventListener("input", () => {
+      if ((select.value || "").trim() === CUSTOM_KEYWORD) {
+        setHasKeywordSelected(customInput.value.trim().length > 0);
+      }
+    });
+  }
+
+  select.addEventListener("change", async () => {
+    const chosen = (select.value || "").trim();
+
+    if (!chosen) {
+      showCustomInput(false);
+      setHasKeywordSelected(false);
+      return;
+    }
+
+    if (chosen === CUSTOM_KEYWORD) {
+      showCustomInput(true);
+      setHasKeywordSelected((customInput?.value || "").trim().length > 0);
+      if (customInput) customInput.focus();
+      return;
+    }
+
+    showCustomInput(false);
+
+    if (chosen === NO_KEYWORD) {
+      setHasKeywordSelected(true);
+      return;
+    }
+
+    if (chosen === ALL_DIMENSIONS) {
+      setHasKeywordSelected(true);
+      setLoading(true, {
+        title: "Loading full graph…",
+        subtitle: "Fetching all nodes and relationships from Neo4j.",
+      });
+      try {
+        await fetchAndRenderFullGraph(onSubgraphFetch);
+        switchToTopLevelTab({ tab: TopLevelTabs.GRAPH });
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    setHasKeywordSelected(true);
+    setLoading(true, {
+      title: "Loading graph…",
+      subtitle: "If the database is waking up, this may take a moment.",
+    });
+    try {
+      await fetchAndRenderSubgraph(chosen, onSubgraphFetch);
+      switchToTopLevelTab({ tab: TopLevelTabs.GRAPH });
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  // ── Phase 3: Initial graph fetch — fire in background, does NOT block init ──
+  // Do NOT call setLoading() here — that would disable the dropdown.
+  // The spinner is shown only; the user can still interact with the dropdown.
+  if (keywordSpinner) keywordSpinner.classList.remove("d-none");
+  fetchAndRenderFullGraph(onSubgraphFetch)
+    .then(() => switchToTopLevelTab({ tab: TopLevelTabs.GRAPH }))
+    .finally(() => {
+      if (keywordSpinner) keywordSpinner.classList.add("d-none");
+    });
 }
 
 /**

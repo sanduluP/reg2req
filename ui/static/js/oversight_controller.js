@@ -22,12 +22,7 @@ let allNoveltyResults = [];
 let tripletExtractionInFlight = false;
 let tripletExtractionGeneration = 0;
 
-// Human review of quality sentences (before extraction):
-//  - deselectedReviewIds: rows the reviewer unchecked (kept visible, not sent)
-//  - deletedReviewIds:    rows the reviewer deleted (hidden + not sent)
-// A quality is sent to extraction only if it survives the relevance threshold,
-// is not deleted, and is not deselected.
-const deselectedReviewIds = new Set();
+// deletedReviewIds: rows the reviewer explicitly deleted (hidden + not sent to extraction).
 const deletedReviewIds = new Set();
 
 // Live relevance-threshold filtering. Qualities are decomposed once, from the
@@ -131,15 +126,10 @@ function getVisibleResults() {
   return getIncludedResults().filter(r => !deletedReviewIds.has(stableReviewId(r)));
 }
 
-/** Is this quality currently selected to be sent to extraction / the KG? */
-function isReviewSelected(result) {
-  const id = stableReviewId(result);
-  return !deletedReviewIds.has(id) && !deselectedReviewIds.has(id);
-}
 
-/** Visible + selected qualities — the exact set that feeds triplet extraction. */
+/** All visible (non-deleted) qualities feed triplet extraction — no checkbox gate. */
 function getSelectedResults() {
-  return getVisibleResults().filter(isReviewSelected);
+  return getVisibleResults();
 }
 
 /**
@@ -194,7 +184,7 @@ function updateQualitySummary() {
   const belowFloor = extractedFloor != null && currentThreshold < extractedFloor - 1e-9;
 
   const parts = [
-    `<i class="bi bi-check2-square me-1"></i><span class="fw-semibold">${selected}</span> selected `,
+    `<i class="bi bi-list-check me-1"></i><span class="fw-semibold">${selected}</span> qualities ready `,
     `<span class="text-muted">of ${included} included · ${total} total (relevance ≥ ${currentThreshold.toFixed(2)})</span>`,
   ];
   if (deleted > 0) {
@@ -234,22 +224,12 @@ function renderTable({ container, items, decisionKey, page }) {
   const tableWrap = document.createElement("div");
   tableWrap.className = "table-responsive";
 
-  // Selection summary for THIS decision group (across all pages).
-  const groupSelectedCount = items.filter(isReviewSelected).length;
-  const allSelected = items.length > 0 && groupSelectedCount === items.length;
-
   const table = document.createElement("table");
   table.className = "table table-hover align-middle mb-2";
 
   table.innerHTML = `
     <thead>
       <tr>
-        <th style="width: 2.5rem;" class="text-center">
-          <input type="checkbox" class="form-check-input review-select-all"
-            ${allSelected ? "checked" : ""}
-            title="Select / deselect all in this tab"
-            aria-label="Select all qualities in this tab">
-        </th>
         <th>Quality</th>
         <th style="width: 110px;">
           Similarity
@@ -269,15 +249,9 @@ function renderTable({ container, items, decisionKey, page }) {
   slice.forEach(r => {
     const sourceTitle = sourcePopoverTitle(r);
     const sourceContent = sourcePopoverContent(r);
-    const selected = isReviewSelected(r);
 
     const tr = document.createElement("tr");
-    if (!selected) tr.classList.add("review-row-deselected");
     tr.innerHTML = `
-      <td class="text-center">
-        <input type="checkbox" class="form-check-input review-select"
-          ${selected ? "checked" : ""} aria-label="Select this quality">
-      </td>
       <td class="quality-cell">
         <div class="quality-text d-flex align-items-start gap-2">
           <button type="button"
@@ -307,18 +281,6 @@ function renderTable({ container, items, decisionKey, page }) {
       </td>
     `;
 
-    const cb = tr.querySelector(".review-select");
-    cb.addEventListener("change", () => {
-      const id = stableReviewId(r);
-      if (cb.checked) deselectedReviewIds.delete(id);
-      else deselectedReviewIds.add(id);
-      tr.classList.toggle("review-row-deselected", !cb.checked);
-      // keep the tab's select-all box in sync
-      const head = table.querySelector(".review-select-all");
-      if (head) head.checked = items.every(isReviewSelected);
-      refreshReviewSelection();
-    });
-
     tr.querySelector(".review-delete").addEventListener("click", () => {
       deletedReviewIds.add(stableReviewId(r));
       grouped = groupByDecision(getVisibleResults());
@@ -328,20 +290,6 @@ function renderTable({ container, items, decisionKey, page }) {
 
     tbody.appendChild(tr);
   });
-
-  // Header select-all toggles every row in this decision group (all pages).
-  const selectAll = table.querySelector(".review-select-all");
-  if (selectAll) {
-    selectAll.addEventListener("change", () => {
-      items.forEach(r => {
-        const id = stableReviewId(r);
-        if (selectAll.checked) deselectedReviewIds.delete(id);
-        else deselectedReviewIds.add(id);
-      });
-      renderDecision(decisionKey, cur);
-      refreshReviewSelection();
-    });
-  }
 
   tableWrap.appendChild(table);
   container.appendChild(tableWrap);
@@ -445,8 +393,6 @@ export function renderHumanOversightFromPipelineResult(pipelineResult, runContex
   const novelty = pipelineResult?.NoveltyLLM;
   const results = Array.isArray(novelty?.results) ? novelty.results : [];
   allNoveltyResults = normalizeReviewResults(results);
-  // Fresh review session: every quality starts selected and none deleted.
-  deselectedReviewIds.clear();
   deletedReviewIds.clear();
 
   // Threshold the qualities were extracted at; the slider starts here so the
@@ -483,17 +429,13 @@ export function renderHumanOversightFromPipelineResult(pipelineResult, runContex
   updateQualitySummary();
 
   if (!selectedItems.length) {
-    setTripletStatus("Triplet extraction: no reviewed qualities available.");
+    setTripletStatus("Triplet extraction: no qualities available.");
     syncExtractTripletsButton();
     return;
   }
 
-  // Do NOT auto-extract. The human-in-the-loop reviews qualities and confirms
-  // the extraction profile (predicate families, edge mode, modality, custom
-  // predicates) first, then clicks "Extract triplets". The profile can be set
-  // while the pipeline is still running.
   setTripletStatus(
-    `${selectedItems.length} qualities ready. Review your extraction profile above, then click “Extract triplets”.`
+    `${selectedItems.length} qualities ready. Review extraction profile above, then click "Extract triplets".`
   );
   syncExtractTripletsButton();
 }
@@ -765,7 +707,7 @@ export function wireGoToTripletsButton() {
   btn.addEventListener("click", () => {
     const ok = showCachedTripletsStep();
     if (!ok) {
-      alert("No extracted triplets yet. Click “Extract triplets” to generate them with your chosen profile.");
+      alert(`No extracted triplets yet. Click "Extract triplets" to generate them with your chosen profile.`);
     }
   });
 }
@@ -793,7 +735,7 @@ export function wireExtractTripletsButton() {
 
   btn.addEventListener("click", () => {
     if (!pendingTripletItems.length) {
-      alert("No reviewed qualities are available for extraction yet.");
+      alert("No qualities are available for extraction yet.");
       return;
     }
     const generation = ++tripletExtractionGeneration;
@@ -815,7 +757,6 @@ export function wireExtractTripletsButton() {
 export function resetHumanOversightUI() {
   allNoveltyResults = [];
   grouped = null;
-  deselectedReviewIds.clear();
   deletedReviewIds.clear();
   runThreshold = null;
   currentThreshold = null;
@@ -829,7 +770,7 @@ export function resetHumanOversightUI() {
   tripletExtractionGeneration += 1;
   pendingTripletItems = [];
   syncExtractTripletsButton();
-  setTripletStatus("Triplet extraction: waiting for reviewed qualities.");
+  setTripletStatus("Triplet extraction: waiting for qualities.");
   updateQualitySummary();
 
   ["existing", "partially_new", "new"].forEach((k) => {
