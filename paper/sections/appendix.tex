@@ -21,7 +21,7 @@ scratchpad is exposed outside the structured fields.
 Used by Stage~2c to decompose up to \texttt{\$max\_qualities\_per\_chunk}
 atomic quality sentences per chunk in a single batched LLM call.
 
-\begin{lstlisting}[language={},breaklines=true,caption={}]
+\begin{lstlisting}[language={},breaklines=true,caption={},numbers=none,xleftmargin=0pt]
 You are a careful assistant. Your task is to extract clear, atomic
 "qualities" from EACH provided text chunk.
 
@@ -79,7 +79,7 @@ Used by Stage~4 to classify each quality sentence as
 \textsc{existing}, \textsc{partially\_new}, or \textsc{new} relative
 to its retrieved KG neighbours, in a single batched call.
 
-\begin{lstlisting}[language={},breaklines=true,caption={}]
+\begin{lstlisting}[language={},breaklines=true,caption={},numbers=none,xleftmargin=0pt]
 You are a careful knowledge-graph curator.
 
 Your task: classify EACH candidate QUALITY sentence as one of:
@@ -152,7 +152,7 @@ Used by Stage~5 to extract \textsc{(Subject, Object, Predicate)}
 triplets with deontic modality from a batch of quality sentences,
 constrained to the declared predicate vocabulary.
 
-\begin{lstlisting}[language={},breaklines=true,caption={}]
+\begin{lstlisting}[language={},breaklines=true,caption={},numbers=none,xleftmargin=0pt]
 You are an information extraction system. Extract meaningful semantic
 relationships from each sentence so they can be reviewed and inserted
 into a Knowledge Graph.
@@ -240,7 +240,7 @@ Used by the comparison engine to adjudicate candidate inter-standard
 conflicts, classifying each as \textsc{agree}, \textsc{unrelated},
 \textsc{tension}, or \textsc{contradict}.
 
-\begin{lstlisting}[language={},breaklines=true,caption={}]
+\begin{lstlisting}[language={},breaklines=true,caption={},numbers=none,xleftmargin=0pt]
 You are an expert reviewer of AI standards and guidelines (ISO/IEC,
 Fraunhofer, EU AI Act and similar). You compare pairs of statements
 extracted from different documents and judge whether they agree or
@@ -294,7 +294,7 @@ $candidates_json
 Used by Stage~2b to expand a user-supplied focus keyword into up to
 ten synonyms for the KeyBERT relevance gate.
 
-\begin{lstlisting}[language={},breaklines=true,caption={}]
+\begin{lstlisting}[language={},breaklines=true,caption={},numbers=none,xleftmargin=0pt]
 Return only strict JSON. Do not explain or reason.
 
 Generate up to 10 close synonyms, alternatives, and natural
