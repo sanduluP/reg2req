@@ -51,7 +51,23 @@ The pipeline is modular — each stage is a single function call in [`src/kbdebu
 
 ### Prerequisites
 
-- Python 3.10+
+- **Python 3.11.9** (recommended — the lock file was generated for this version)
+  The project declares `requires-python = ">=3.10"` but `requirements.lock.txt` pins exact
+  package versions built for 3.11. Python 3.12/3.13 may work but some wheels might not
+  resolve cleanly from the lock file.
+
+  If you use **pyenv**, the `.python-version` file in the repo root will activate 3.11.9
+  automatically:
+  ```bash
+  pyenv install 3.11.9   # one-time
+  # .python-version takes effect automatically inside the repo directory
+  ```
+
+  If you do not use pyenv, create your venv with an explicit Python 3.11 binary:
+  ```bash
+  python3.11 -m venv venv
+  ```
+
 - A running **Neo4j 5.x** instance (local Desktop, Docker, or Aura)
 - An **OpenAI-compatible LLM endpoint** — the DFKI internal server (`deepseek-r1:32b`), DeepSeek API, OpenAI, or any local model served via Ollama / vLLM
 
